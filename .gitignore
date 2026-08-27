@@ -1,0 +1,9 @@
+/logs/*
+/api/error_log
+/admin/error_log
+/config/config.php
+*.log
+.env
+.DS_Store
+Thumbs.db
+
