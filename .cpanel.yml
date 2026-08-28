@@ -10,6 +10,7 @@ deployment:
     - /bin/cp -R cron $DEPLOYPATH
     - /bin/cp -R includes $DEPLOYPATH
     - /bin/cp index.php $DEPLOYPATH
+    - /bin/cp diagnostico.php $DEPLOYPATH
     - /bin/cp login.php $DEPLOYPATH
     - /bin/cp logout.php $DEPLOYPATH
     - /bin/cp README_PRO.md $DEPLOYPATH
