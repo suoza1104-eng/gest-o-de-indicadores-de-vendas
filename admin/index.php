@@ -1811,6 +1811,7 @@ $attrChart = array(
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="../assets/css/app-pro.css">
     <style>
+        html { font-size: 87.5%; }
         .child-row.hidden { display: none !important; }
         .sync-extra.hidden { display: none !important; }
         .hier-table .indent-1 { padding-left: 28px !important; }
@@ -1884,21 +1885,21 @@ $attrChart = array(
         </div>
 
         <nav class="p-3 space-y-1.5 flex-1">
-            <button type="button" class="nav-item active" data-section-target="dashboard">
+            <button type="button" class="nav-item group active" data-section-target="dashboard">
                 <div class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-400 group-hover:bg-indigo-600/20 group-hover:text-indigo-400 transition-colors">
                     <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
                 </div>
                 <span class="sidebar-label">Indicadores</span>
             </button>
 
-            <button type="button" class="nav-item" data-section-target="campaigns">
+            <button type="button" class="nav-item group" data-section-target="campaigns">
                 <div class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-400 group-hover:bg-indigo-600/20 group-hover:text-indigo-400 transition-colors">
                     <i data-lucide="target" class="w-4 h-4"></i>
                 </div>
                 <span class="sidebar-label">Campanhas & Vendas</span>
             </button>
 
-            <button type="button" class="nav-item" data-section-target="settings">
+            <button type="button" class="nav-item group" data-section-target="settings">
                 <div class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-400 group-hover:bg-indigo-600/20 group-hover:text-indigo-400 transition-colors">
                     <i data-lucide="settings" class="w-4 h-4"></i>
                 </div>
@@ -1932,9 +1933,6 @@ $attrChart = array(
             </div>
 
             <div class="flex items-center gap-3">
-                <button type="button" class="btn-pro btn-secondary btn-sm" data-theme-toggle title="Alternar tema">
-                    <i data-lucide="sun-moon" class="w-4 h-4"></i>
-                </button>
                 <a href="upload_hotmart.php" class="btn-pro btn-emerald btn-sm">
                     <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
                     <span class="hidden sm:inline">Importar CSV Hotmart</span>
@@ -1947,7 +1945,7 @@ $attrChart = array(
         </header>
 
         <!-- Main Body Workspace -->
-        <div class="p-6 md:p-8 max-w-[1700px] mx-auto w-full space-y-8">
+        <div class="p-4 md:p-6 max-w-[1700px] mx-auto w-full space-y-6">
             
             <div class="app-section hidden" data-app-section="settings">
             <!-- SECTION 1: CONFIGURAÇÕES DE INTEGRAÇÃO (data-app-group="settings") -->

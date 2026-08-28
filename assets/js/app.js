@@ -1,33 +1,10 @@
 (function () {
-  var form = document.getElementById('integration-form');
-  var feedback = document.getElementById('feedback');
-  var btnTest = document.getElementById('btn-test');
-  var btnSync = document.getElementById('btn-sync');
-  var btnAttrSync = document.getElementById('btn-attr-sync');
-  var btnSyncAll = document.getElementById('btn-sync-all');
-  var btnSyncHistory = document.getElementById('btn-sync-history');
-  var btnAttrHistory = document.getElementById('btn-attr-history');
-  var metaHistoryInput = document.getElementById('meta-history-days');
-  var attrHistoryInput = document.getElementById('attr-history-days');
-  var buttons = [btnTest, btnSync, btnAttrSync, btnSyncAll, btnSyncHistory, btnAttrHistory].filter(Boolean);
   var shell = document.querySelector('[data-app-shell]');
-  var sidebarToggle = document.querySelector('[data-sidebar-toggle]');
   var navItems = Array.prototype.slice.call(document.querySelectorAll('[data-section-target]'));
-  var contentSections = Array.prototype.slice.call(document.querySelectorAll('.container > section'));
+  var contentSections = Array.prototype.slice.call(document.querySelectorAll('[data-app-section]'));
 
   function setupNavigation() {
     if (!shell || !contentSections.length) return;
-
-    var sectionGroups = [
-      'settings',
-      'dashboard', 'dashboard', 'dashboard', 'dashboard', 'dashboard', 'dashboard', 'dashboard', 'dashboard',
-      'campaigns', 'campaigns', 'campaigns', 'campaigns',
-      'settings', 'settings'
-    ];
-
-    contentSections.forEach(function (section, index) {
-      section.setAttribute('data-app-group', sectionGroups[index] || 'dashboard');
-    });
 
     function resizeChartsSoon() {
       if (typeof Chart === 'undefined' || !Chart.instances) return;
@@ -43,12 +20,11 @@
     function showSection(target) {
       var selected = target || 'dashboard';
       contentSections.forEach(function (section) {
-        section.hidden = section.getAttribute('data-app-group') !== selected;
+        section.classList.toggle('hidden', section.getAttribute('data-app-section') !== selected);
       });
       navItems.forEach(function (item) {
         item.classList.toggle('active', item.getAttribute('data-section-target') === selected);
       });
-      if (window.innerWidth <= 900) shell.classList.remove('mobile-menu-open');
       resizeChartsSoon();
     }
 
@@ -61,34 +37,7 @@
     showSection('dashboard');
   }
 
-  if (sidebarToggle && shell) {
-    sidebarToggle.addEventListener('click', function () {
-      if (window.innerWidth <= 900) {
-        shell.classList.toggle('mobile-menu-open');
-      } else {
-        shell.classList.toggle('sidebar-collapsed');
-      }
-    });
-  }
-
   setupNavigation();
-
-  function showFeedback(message, ok) {
-    if (!feedback) return;
-    feedback.className = 'feedback show ' + (ok ? 'ok' : 'error');
-    feedback.innerHTML = message;
-  }
-
-  function setBusy(button, busy, text) {
-    buttons.forEach(function (btn) {
-      if (!btn) return;
-      btn.disabled = busy;
-      if (busy && btn === button) btn.classList.add('is-loading'); else btn.classList.remove('is-loading');
-    });
-    if (!button) return;
-    if (!button.dataset.originalText) button.dataset.originalText = button.textContent;
-    button.textContent = busy ? text : button.dataset.originalText;
-  }
 
   async function postForm(url, data) {
     var response = await fetch(url, { method: 'POST', body: data });
@@ -103,134 +52,6 @@
       throw new Error((json && json.message) || 'Erro inesperado.');
     }
     return json;
-  }
-
-  async function ensureSaved() {
-    if (!form) throw new Error('Formulário não encontrado.');
-    var saveData = new FormData(form);
-    var saveJson = await postForm('../api/save_integration.php', saveData);
-    var idField = form.querySelector('input[name="id"]');
-    if (idField && saveJson.integration_id) idField.value = saveJson.integration_id;
-    return idField ? idField.value : '';
-  }
-
-  async function handleAction(button, loadingText, callback) {
-    try {
-      setBusy(button, true, loadingText);
-      showFeedback(loadingText + ' Aguarde...', true);
-      await callback();
-    } catch (error) {
-      showFeedback(error.message, false);
-    } finally {
-      setBusy(button, false);
-    }
-  }
-
-  function clampInt(value, min, max, fallback) {
-    var n = parseInt(value, 10);
-    if (isNaN(n)) return fallback;
-    if (n < min) return min;
-    if (n > max) return max;
-    return n;
-  }
-
-  if (form) {
-    form.addEventListener('submit', async function (e) {
-      e.preventDefault();
-      await handleAction(form.querySelector('button[type="submit"]'), 'Salvando...', async function () {
-        await ensureSaved();
-        showFeedback('Integração salva com sucesso.', true);
-      });
-    });
-  }
-
-  if (btnTest) {
-    btnTest.addEventListener('click', async function () {
-      await handleAction(btnTest, 'Testando conexão...', async function () {
-        var integrationId = await ensureSaved();
-        var data = new FormData();
-        data.append('integration_id', integrationId);
-        var json = await postForm('../api/test_connection.php', data);
-        showFeedback(json.message, true);
-      });
-    });
-  }
-
-  if (btnSync) {
-    btnSync.addEventListener('click', async function () {
-      await handleAction(btnSync, 'Sincronizando Meta...', async function () {
-        var integrationId = await ensureSaved();
-        var data = new FormData();
-        data.append('integration_id', integrationId);
-        data.append('scope', 'all');
-        data.append('mode', 'daily');
-        var json = await postForm('../api/run_sync.php', data);
-        showFeedback(json.message + ' Janela diária: últimos 3 dias. Atualize a página para ver os dados.', true);
-      });
-    });
-  }
-
-  if (btnSyncHistory) {
-    btnSyncHistory.addEventListener('click', async function () {
-      await handleAction(btnSyncHistory, 'Importando histórico Meta...', async function () {
-        var integrationId = await ensureSaved();
-        var days = clampInt(metaHistoryInput ? metaHistoryInput.value : 30, 1, 180, 30);
-        var data = new FormData();
-        data.append('integration_id', integrationId);
-        data.append('scope', 'all');
-        data.append('mode', 'history');
-        data.append('days', String(days));
-        var json = await postForm('../api/run_sync.php', data);
-        showFeedback(json.message + ' Histórico Meta importado para ' + days + ' dias.', true);
-      });
-    });
-  }
-
-  if (btnAttrSync) {
-    btnAttrSync.addEventListener('click', async function () {
-      await handleAction(btnAttrSync, 'Sincronizando atribuição...', async function () {
-        var integrationId = await ensureSaved();
-        var data = new FormData();
-        data.append('integration_id', integrationId);
-        data.append('mode', 'daily');
-        var json = await postForm('../api/run_attribution_sync.php', data);
-        showFeedback(json.message + ' Janela diária: últimos 3 dias. Atualize a página para ver os dados.', true);
-      });
-    });
-  }
-
-  if (btnAttrHistory) {
-    btnAttrHistory.addEventListener('click', async function () {
-      await handleAction(btnAttrHistory, 'Importando histórico de atribuição...', async function () {
-        var integrationId = await ensureSaved();
-        var days = clampInt(attrHistoryInput ? attrHistoryInput.value : 90, 1, 365, 90);
-        var data = new FormData();
-        data.append('integration_id', integrationId);
-        data.append('mode', 'history');
-        data.append('days', String(days));
-        var json = await postForm('../api/run_attribution_sync.php', data);
-        showFeedback(json.message + ' Histórico de atribuição importado para ' + days + ' dias.', true);
-      });
-    });
-  }
-
-  if (btnSyncAll) {
-    btnSyncAll.addEventListener('click', async function () {
-      await handleAction(btnSyncAll, 'Sincronizando tudo...', async function () {
-        var integrationId = await ensureSaved();
-        var data = new FormData();
-        data.append('integration_id', integrationId);
-        data.append('scope', 'all');
-        data.append('mode', 'daily');
-        await postForm('../api/run_sync.php', data);
-        showFeedback('Meta sincronizada. Agora importando atribuição...', true);
-        data = new FormData();
-        data.append('integration_id', integrationId);
-        data.append('mode', 'daily');
-        await postForm('../api/run_attribution_sync.php', data);
-        showFeedback('Sincronização completa concluída. Atualize a página para ver os dados.', true);
-      });
-    });
   }
 
   function makeLineChart(id, labels, datasets, options) {
@@ -429,38 +250,6 @@
     });
   });
 
-  document.querySelectorAll('[data-multi-select]').forEach(function (wrap) {
-    var trigger = wrap.querySelector('[data-multi-select-trigger]');
-    var menu = wrap.querySelector('[data-multi-select-menu]');
-    var all = wrap.querySelector('[data-select-all-campaigns]');
-    var boxes = Array.prototype.slice.call(wrap.querySelectorAll('input[name="campaign[]"]'));
-
-    function updateLabel() {
-      var checked = boxes.filter(function (b) { return b.checked; }).length;
-      if (trigger) trigger.textContent = checked ? (checked + ' campanha(s) selecionada(s)') : 'Todas';
-      if (all) all.checked = checked === 0;
-    }
-
-    if (trigger) {
-      trigger.addEventListener('click', function (e) {
-        e.preventDefault();
-        wrap.classList.toggle('open');
-      });
-    }
-    document.addEventListener('click', function (e) {
-      if (!wrap.contains(e.target)) wrap.classList.remove('open');
-    });
-    if (all) {
-      all.addEventListener('change', function () {
-        if (all.checked) { boxes.forEach(function (b) { b.checked = false; }); }
-        updateLabel();
-      });
-    }
-    boxes.forEach(function (b) {
-      b.addEventListener('change', function () { if (all) all.checked = false; updateLabel(); });
-    });
-    updateLabel();
-  });
   function fillSelect(select, items, placeholder) {
     if (!select) return;
     select.innerHTML = '';
