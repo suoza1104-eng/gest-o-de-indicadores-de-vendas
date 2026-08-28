@@ -1806,6 +1806,15 @@ $attrChart = array(
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Meta Ads Manager Pro - Painel de Atribuição</title>
+    <script>
+        (function () {
+            try {
+                if (localStorage.getItem('meta_admin_theme') === 'light') {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                }
+            } catch (e) {}
+        })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -1933,6 +1942,9 @@ $attrChart = array(
             </div>
 
             <div class="flex items-center gap-3">
+                <button type="button" class="btn-pro btn-secondary btn-sm" data-theme-toggle title="Alternar tema claro/escuro">
+                    <i data-lucide="sun-moon" class="w-4 h-4"></i>
+                </button>
                 <a href="upload_hotmart.php" class="btn-pro btn-emerald btn-sm">
                     <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
                     <span class="hidden sm:inline">Importar CSV Hotmart</span>
@@ -1965,10 +1977,16 @@ $attrChart = array(
                 <div class="integration-list">
                     <div class="flex items-center justify-between gap-3">
                         <h3 class="text-sm font-bold text-white">Integrações Meta Ads (Graph API)</h3>
-                        <button type="button" class="btn-pro btn-secondary btn-sm" data-new-integration>
-                            <i data-lucide="plus" class="w-4 h-4"></i>
-                            <span>Nova BM / Conta Meta</span>
-                        </button>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button type="button" class="btn-pro btn-primary btn-sm" data-sync-all-integrations>
+                                <i data-lucide="zap" class="w-4 h-4"></i>
+                                <span>Sincronizar Todas Agora</span>
+                            </button>
+                            <button type="button" class="btn-pro btn-secondary btn-sm" data-new-integration>
+                                <i data-lucide="plus" class="w-4 h-4"></i>
+                                <span>Nova BM / Conta Meta</span>
+                            </button>
+                        </div>
                     </div>
                     <div class="space-y-3 mt-3">
                         <?php if (!$integrations): ?>
@@ -1996,11 +2014,19 @@ $attrChart = array(
                                 <div class="flex flex-wrap items-center gap-2">
                                     <button type="button" class="btn-pro btn-secondary btn-sm" data-sync-integration="<?= (int)$item['id'] ?>">
                                         <i data-lucide="zap" class="w-4 h-4"></i>
-                                        <span>Sincronizar</span>
+                                        <span>Sincronizar Agora</span>
                                     </button>
                                     <button type="button" class="btn-pro btn-secondary btn-sm" data-edit-integration='<?= h(json_encode($item, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>'>
                                         <i data-lucide="pencil" class="w-4 h-4"></i>
                                         <span>Editar</span>
+                                    </button>
+                                    <button type="button" class="btn-pro btn-secondary btn-sm" data-toggle-integration='<?= h(json_encode($item, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>'>
+                                        <i data-lucide="<?= (($item['status'] ?? 'active') === 'active') ? 'pause' : 'play' ?>" class="w-4 h-4"></i>
+                                        <span><?= (($item['status'] ?? 'active') === 'active') ? 'Pausar' : 'Ativar' ?></span>
+                                    </button>
+                                    <button type="button" class="btn-pro btn-danger btn-sm" data-delete-integration="<?= (int)$item['id'] ?>" data-integration-name="<?= h((string)($item['name'] ?? '')) ?>">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                        <span>Excluir</span>
                                     </button>
                                 </div>
                             </div>

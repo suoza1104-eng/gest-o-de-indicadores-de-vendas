@@ -453,6 +453,17 @@ body {
     box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
 }
 
+.btn-danger {
+    background: rgba(244, 63, 94, 0.08);
+    color: var(--accent-rose);
+    border: 1px solid rgba(244, 63, 94, 0.35);
+}
+
+.btn-danger:hover {
+    background: rgba(244, 63, 94, 0.18);
+    border-color: rgba(244, 63, 94, 0.55);
+}
+
 .btn-sm {
     padding: 6px 12px;
     font-size: 12px;
@@ -562,5 +573,105 @@ body {
 
 @keyframes spin {
     to { transform: rotate(360deg); }
+}
+
+/* ==========================================================================
+   Light Theme (toggled via [data-theme="light"] on <html>)
+   ========================================================================== */
+html[data-theme="light"] {
+    --bg-dark: #f4f6fb;
+    --bg-surface: #ffffff;
+    --bg-card: rgba(255, 255, 255, 0.92);
+    --bg-card-hover: rgba(255, 255, 255, 1);
+    --border-color: rgba(15, 23, 42, 0.09);
+    --border-highlight: rgba(99, 102, 241, 0.35);
+
+    --text-main: #0f172a;
+    --text-muted: #52607a;
+    --text-dim: #7c8aa5;
+
+    --shadow-card: 0 10px 24px -12px rgba(15, 23, 42, 0.12);
+}
+
+html[data-theme="light"] body {
+    background-color: var(--bg-dark);
+    background-image:
+        radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.06) 0%, transparent 40%),
+        radial-gradient(circle at 85% 75%, rgba(139, 92, 246, 0.05) 0%, transparent 40%);
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-track { background: var(--bg-dark); }
+html[data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.15); }
+html[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: rgba(15, 23, 42, 0.25); }
+
+html[data-theme="light"] .pro-input,
+html[data-theme="light"] .pro-select,
+html[data-theme="light"] .pro-textarea {
+    background: #ffffff;
+    color: var(--text-main);
+    border-color: rgba(15, 23, 42, 0.14);
+}
+
+html[data-theme="light"] .pro-input:focus,
+html[data-theme="light"] .pro-select:focus,
+html[data-theme="light"] .pro-textarea:focus {
+    background: #ffffff;
+}
+
+html[data-theme="light"] .pro-input::placeholder { color: #a2adc2; }
+
+html[data-theme="light"] .kpi-value { color: var(--text-main); }
+
+html[data-theme="light"] .pro-table th {
+    background: #f1f4fa;
+    color: var(--text-muted);
+}
+
+html[data-theme="light"] .pro-table tr:hover td {
+    background: rgba(15, 23, 42, 0.025);
+}
+
+html[data-theme="light"] .multi-select-menu {
+    background: #ffffff;
+    border-color: rgba(15, 23, 42, 0.12);
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.15);
+}
+
+html[data-theme="light"] .multi-select-option { color: var(--text-muted); }
+html[data-theme="light"] .multi-select-option:hover { background: rgba(15, 23, 42, 0.05); color: var(--text-main); }
+
+html[data-theme="light"] .toast {
+    background: rgba(255, 255, 255, 0.98);
+    color: var(--text-main);
+}
+
+/* Remap raw dark-mode utility classes used throughout the dashboard markup */
+html[data-theme="light"] .bg-\[\#090d16\] { background-color: var(--bg-dark); }
+html[data-theme="light"] .text-white { color: #0f172a; }
+html[data-theme="light"] .text-slate-100,
+html[data-theme="light"] .text-slate-200,
+html[data-theme="light"] .text-slate-300 { color: #334155; }
+html[data-theme="light"] .text-slate-400 { color: #5b6b85; }
+html[data-theme="light"] .text-slate-500 { color: #64748b; }
+
+html[data-theme="light"] .bg-white\/5,
+html[data-theme="light"] .bg-white\/10 { background-color: rgba(15, 23, 42, 0.05); }
+html[data-theme="light"] .border-white\/5,
+html[data-theme="light"] .border-white\/10,
+html[data-theme="light"] .border-white\/20 { border-color: rgba(15, 23, 42, 0.1); }
+html[data-theme="light"] .bg-slate-900,
+html[data-theme="light"] .bg-slate-900\/60 { background-color: #eef1f7; }
+html[data-theme="light"] .hover\:bg-white\/5:hover,
+html[data-theme="light"] .hover\:text-white:hover { color: #0f172a; }
+
+html[data-theme="light"] .text-indigo-400 { color: #4f46e5; }
+html[data-theme="light"] .text-indigo-600 { color: #4338ca; }
+html[data-theme="light"] .text-emerald-400 { color: #059669; }
+html[data-theme="light"] .text-amber-400 { color: #b45309; }
+html[data-theme="light"] .text-rose-400 { color: #e11d48; }
+
+html[data-theme="light"] .glass-card,
+html[data-theme="light"] .kpi-card {
+    box-shadow: 0 6px 18px -10px rgba(15, 23, 42, 0.15);
 }
 

@@ -282,6 +282,173 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     }
+
+    // 7. Theme Toggle (dark/light)
+    const themeToggleBtns = document.querySelectorAll('[data-theme-toggle]');
+    if (themeToggleBtns.length) {
+        const updateThemeIcon = () => {
+            const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+            themeToggleBtns.forEach((btn) => {
+                const icon = btn.querySelector('[data-lucide]');
+                if (icon) icon.setAttribute('data-lucide', isLight ? 'moon' : 'sun');
+            });
+            if (window.lucide) window.lucide.createIcons();
+        };
+        updateThemeIcon();
+        themeToggleBtns.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+                if (isLight) {
+                    document.documentElement.removeAttribute('data-theme');
+                    try { localStorage.setItem('meta_admin_theme', 'dark'); } catch (e) {}
+                } else {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                    try { localStorage.setItem('meta_admin_theme', 'light'); } catch (e) {}
+                }
+                updateThemeIcon();
+            });
+        });
+    }
+
+    // 8. Multi-integration management (Nova BM / Editar / Pausar / Excluir / Sincronizar)
+    const integrationForm = document.getElementById('integration-form');
+    if (integrationForm) {
+        const integrationDefaults = {
+            id: '', name: 'Meta Principal', ad_account_id: '', app_id: '', app_secret: '',
+            access_token: '', sync_interval_minutes: 30, status: 'active', timezone: 'America/Sao_Paulo',
+            currency_code: 'BRL', currency_spread_percent: 0, manual_exchange_rate: ''
+        };
+
+        function fillIntegrationForm(data) {
+            Object.keys(integrationDefaults).forEach((key) => {
+                const field = integrationForm.querySelector('[name="' + key + '"]');
+                if (!field) return;
+                const value = data && data[key] !== undefined && data[key] !== null ? data[key] : integrationDefaults[key];
+                field.value = value;
+            });
+        }
+
+        document.querySelectorAll('[data-new-integration]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                fillIntegrationForm(null);
+                integrationForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                showToast('Preencha os dados da nova BM e clique em Salvar Configurações.', 'info');
+            });
+        });
+
+        document.querySelectorAll('[data-edit-integration]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                try {
+                    const data = JSON.parse(btn.getAttribute('data-edit-integration'));
+                    fillIntegrationForm(data);
+                    integrationForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    showToast('Editando "' + (data.name || '') + '". Ajuste os campos e clique em Salvar.', 'info');
+                } catch (e) {
+                    showToast('Não foi possível carregar os dados dessa integração.', 'error');
+                }
+            });
+        });
+
+        document.querySelectorAll('[data-toggle-integration]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                try {
+                    const data = JSON.parse(btn.getAttribute('data-toggle-integration'));
+                    const nextStatus = (data.status || 'active') === 'active' ? 'inactive' : 'active';
+                    setButtonLoading(btn, true, nextStatus === 'inactive' ? 'Pausando...' : 'Ativando...');
+                    const fd = new FormData();
+                    Object.keys(integrationDefaults).forEach((key) => {
+                        fd.append(key, data[key] !== undefined && data[key] !== null ? data[key] : integrationDefaults[key]);
+                    });
+                    fd.set('status', nextStatus);
+                    const res = await apiFetch('../api/save_integration.php', { method: 'POST', body: fd });
+                    setButtonLoading(btn, false);
+                    if (res.ok) {
+                        showToast(nextStatus === 'inactive' ? 'Integração pausada.' : 'Integração ativada.', 'success');
+                        setTimeout(() => location.reload(), 900);
+                    } else {
+                        showToast(res.message || 'Erro ao atualizar status.', 'error');
+                    }
+                } catch (e) {
+                    setButtonLoading(btn, false);
+                    showToast('Erro ao atualizar status da integração.', 'error');
+                }
+            });
+        });
+
+        document.querySelectorAll('[data-delete-integration]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const id = btn.getAttribute('data-delete-integration');
+                const name = btn.getAttribute('data-integration-name') || 'esta integração';
+                if (!confirm('Excluir "' + name + '"? Isso apaga também todo o histórico de métricas e sincronizações dessa BM. Essa ação não pode ser desfeita.')) return;
+                setButtonLoading(btn, true, 'Excluindo...');
+                const fd = new FormData();
+                fd.append('id', id);
+                const res = await apiFetch('../api/delete_integration.php', { method: 'POST', body: fd });
+                setButtonLoading(btn, false);
+                if (res.ok) {
+                    showToast('Integração excluída.', 'success');
+                    setTimeout(() => location.reload(), 900);
+                } else {
+                    showToast(res.message || 'Erro ao excluir integração.', 'error');
+                }
+            });
+        });
+
+        document.querySelectorAll('[data-sync-integration]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const integrationId = btn.getAttribute('data-sync-integration');
+                setButtonLoading(btn, true, 'Sincronizando...');
+                const fdMeta = new FormData();
+                fdMeta.append('integration_id', integrationId);
+                fdMeta.append('scope', 'all');
+                fdMeta.append('mode', 'daily');
+                const res1 = await apiFetch('../api/run_sync.php', { method: 'POST', body: fdMeta });
+                const fdAttr = new FormData();
+                fdAttr.append('integration_id', integrationId);
+                fdAttr.append('mode', 'daily');
+                const res2 = await apiFetch('../api/run_attribution_sync.php', { method: 'POST', body: fdAttr });
+                setButtonLoading(btn, false);
+                if (res1.ok && res2.ok) {
+                    showToast('Sincronização concluída para esta BM!', 'success');
+                    setTimeout(() => location.reload(), 1200);
+                } else {
+                    showToast((res1.message || res2.message) || 'Falha ao sincronizar esta BM.', 'error');
+                }
+            });
+        });
+
+        const syncAllBtn = document.querySelector('[data-sync-all-integrations]');
+        if (syncAllBtn) {
+            syncAllBtn.addEventListener('click', async () => {
+                const ids = Array.from(document.querySelectorAll('[data-sync-integration]')).map((b) => b.getAttribute('data-sync-integration'));
+                if (!ids.length) {
+                    showToast('Nenhuma BM cadastrada para sincronizar.', 'error');
+                    return;
+                }
+                setButtonLoading(syncAllBtn, true, 'Sincronizando todas...');
+                let hadError = false;
+                for (const integrationId of ids) {
+                    const fdMeta = new FormData();
+                    fdMeta.append('integration_id', integrationId);
+                    fdMeta.append('scope', 'all');
+                    fdMeta.append('mode', 'daily');
+                    const res1 = await apiFetch('../api/run_sync.php', { method: 'POST', body: fdMeta });
+                    const fdAttr = new FormData();
+                    fdAttr.append('integration_id', integrationId);
+                    fdAttr.append('mode', 'daily');
+                    const res2 = await apiFetch('../api/run_attribution_sync.php', { method: 'POST', body: fdAttr });
+                    if (!res1.ok || !res2.ok) hadError = true;
+                }
+                setButtonLoading(syncAllBtn, false);
+                if (hadError) {
+                    showToast('Sincronização finalizada com falhas em uma ou mais BMs.', 'error');
+                } else {
+                    showToast('Todas as BMs foram sincronizadas com sucesso!', 'success');
+                }
+                setTimeout(() => location.reload(), 1200);
+            });
+        }
+    }
 });
 
 // Chart.js Theme Helper
