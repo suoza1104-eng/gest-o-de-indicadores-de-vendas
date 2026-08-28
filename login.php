@@ -10,6 +10,36 @@ if (!empty($_SESSION['meta_admin_logged'])) {
 
 $error = '';
 
+function ensure_admin_user_schema(PDO $pdo): void
+{
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS admin_users (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            email VARCHAR(190) NOT NULL,
+            password_hash VARCHAR(255) NOT NULL,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_admin_users_email (email)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $stmt = $pdo->prepare("
+        INSERT INTO admin_users (email, password_hash, is_active, created_at, updated_at)
+        VALUES (:email, :password_hash, 1, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+            password_hash = VALUES(password_hash),
+            is_active = VALUES(is_active),
+            updated_at = NOW()
+    ");
+
+    $stmt->execute([
+        ':email' => 'admin@professoremersonleite.site',
+        ':password_hash' => '$2y$12$6/xX10W3jw6yQ21ovAFNdeD/EBbyWmEROm1HQXoU8C96rfaYV1idO',
+    ]);
+}
+
 if (!empty($_GET['expired'])) {
     $error = 'Sua sessão expirou por inatividade. Faça login novamente.';
 }
@@ -17,10 +47,14 @@ if (!empty($_GET['expired'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['email'] ?? '');
     $password = (string)($_POST['password'] ?? '');
-    $loginEmail = strtolower($username) === 'admin' ? 'admin@professoremersonleite.site' : $username;
+    $usernameKey = strtolower($username);
+    $adminAliases = ['admin', 'souza1104', 'suoza1104'];
+    $loginEmail = in_array($usernameKey, $adminAliases, true) ? 'admin@professoremersonleite.site' : $username;
 
     try {
         $pdo = db();
+        ensure_admin_user_schema($pdo);
+
         $stmt = $pdo->prepare("
             SELECT id, email, password_hash, is_active
             FROM admin_users
