@@ -512,6 +512,35 @@ function finish_sync_run($pdo, int $syncRunId, string $status, int $rowsUpserted
     ]);
 }
 
+function apply_integration_currency_conversion(array $row, array $integration): array
+{
+    $currency = strtoupper((string)($integration['currency_code'] ?? 'BRL'));
+    $rate = (float)($integration['manual_exchange_rate'] ?? 0);
+    $spread = (float)($integration['currency_spread_percent'] ?? 0);
+
+    if ($currency !== 'USD' || $rate <= 0) {
+        return $row;
+    }
+
+    $factor = $rate * (1 + ($spread / 100));
+    foreach (['spend', 'cpc', 'cpm'] as $field) {
+        if (isset($row[$field]) && $row[$field] !== '') {
+            $row[$field] = (string)round(((float)$row[$field]) * $factor, 6);
+        }
+    }
+
+    if (!empty($row['actions']) && is_array($row['actions'])) {
+        foreach ($row['actions'] as &$action) {
+            if (isset($action['value']) && in_array($action['action_type'] ?? '', ['omni_purchase', 'purchase'], true)) {
+                $action['value'] = (string)round(((float)$action['value']) * $factor, 6);
+            }
+        }
+        unset($action);
+    }
+
+    return $row;
+}
+
 function sync_meta_level($pdo, array $integration, string $level, string $since, string $until) {
     $integrationId = (int) $integration['id'];
     $accessToken = (string) $integration['access_token'];
@@ -525,6 +554,7 @@ function sync_meta_level($pdo, array $integration, string $level, string $since,
         $count = 0;
 
         foreach ($rows as $row) {
+            $row = apply_integration_currency_conversion($row, $integration);
             switch ($level) {
                 case 'account':
                     upsert_meta_account_daily($pdo, $integrationId, $row);

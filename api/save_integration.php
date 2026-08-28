@@ -10,6 +10,7 @@ if (request_method() !== 'POST') {
 
 try {
     $pdo = db();
+    ensure_meta_integration_schema($pdo);
 
     $id = (int) post('id', 0);
     $name = trim((string) post('name', 'Meta Principal'));
@@ -20,6 +21,11 @@ try {
     $status = post('status', 'active') === 'inactive' ? 'inactive' : 'active';
     $syncInterval = max(5, (int) post('sync_interval_minutes', 30));
     $timezone = trim((string) post('timezone', 'America/Sao_Paulo'));
+    $currencyCode = strtoupper(trim((string) post('currency_code', 'BRL')));
+    $currencyCode = in_array($currencyCode, ['BRL', 'USD'], true) ? $currencyCode : 'BRL';
+    $currencySpreadPercent = max(0, (float) str_replace(',', '.', (string) post('currency_spread_percent', 0)));
+    $manualExchangeRate = trim((string) post('manual_exchange_rate', ''));
+    $manualExchangeRate = $manualExchangeRate === '' ? null : max(0, (float) str_replace(',', '.', $manualExchangeRate));
 
     if ($name === '' || $adAccountId === '') {
         json_response(['ok' => false, 'message' => 'Nome e Ad Account ID são obrigatórios.'], 422);
@@ -35,6 +41,9 @@ try {
             status = :status,
             sync_interval_minutes = :sync_interval_minutes,
             timezone = :timezone,
+            currency_code = :currency_code,
+            currency_spread_percent = :currency_spread_percent,
+            manual_exchange_rate = :manual_exchange_rate,
             updated_at = NOW()
             WHERE id = :id';
 
@@ -49,12 +58,15 @@ try {
             'status' => $status,
             'sync_interval_minutes' => $syncInterval,
             'timezone' => $timezone,
+            'currency_code' => $currencyCode,
+            'currency_spread_percent' => $currencySpreadPercent,
+            'manual_exchange_rate' => $manualExchangeRate,
         ]);
     } else {
         $sql = 'INSERT INTO meta_integrations (
-            name, app_id, app_secret, access_token, ad_account_id, status, sync_interval_minutes, timezone, created_at, updated_at
+            name, app_id, app_secret, access_token, ad_account_id, status, sync_interval_minutes, timezone, currency_code, currency_spread_percent, manual_exchange_rate, created_at, updated_at
         ) VALUES (
-            :name, :app_id, :app_secret, :access_token, :ad_account_id, :status, :sync_interval_minutes, :timezone, NOW(), NOW()
+            :name, :app_id, :app_secret, :access_token, :ad_account_id, :status, :sync_interval_minutes, :timezone, :currency_code, :currency_spread_percent, :manual_exchange_rate, NOW(), NOW()
         )';
 
         $stmt = $pdo->prepare($sql);
@@ -67,6 +79,9 @@ try {
             'status' => $status,
             'sync_interval_minutes' => $syncInterval,
             'timezone' => $timezone,
+            'currency_code' => $currencyCode,
+            'currency_spread_percent' => $currencySpreadPercent,
+            'manual_exchange_rate' => $manualExchangeRate,
         ]);
         $id = (int) $pdo->lastInsertId();
     }

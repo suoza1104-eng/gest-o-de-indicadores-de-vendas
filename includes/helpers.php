@@ -133,6 +133,32 @@ function table_exists($pdo, $table) {
     return $stmt ? (bool) $stmt->fetchColumn() : false;
 }
 
+function column_exists(PDO $pdo, string $table, string $column): bool
+{
+    $stmt = $pdo->prepare('SHOW COLUMNS FROM `' . str_replace('`', '', $table) . '` LIKE :column_name');
+    $stmt->execute([':column_name' => $column]);
+    return (bool) $stmt->fetchColumn();
+}
+
+function ensure_meta_integration_schema(PDO $pdo): void
+{
+    if (!table_exists($pdo, 'meta_integrations')) {
+        return;
+    }
+
+    $columns = [
+        'currency_code' => "ALTER TABLE meta_integrations ADD COLUMN currency_code VARCHAR(3) NOT NULL DEFAULT 'BRL'",
+        'currency_spread_percent' => "ALTER TABLE meta_integrations ADD COLUMN currency_spread_percent DECIMAL(8,4) NOT NULL DEFAULT 0.0000",
+        'manual_exchange_rate' => "ALTER TABLE meta_integrations ADD COLUMN manual_exchange_rate DECIMAL(12,6) DEFAULT NULL",
+    ];
+
+    foreach ($columns as $column => $sql) {
+        if (!column_exists($pdo, 'meta_integrations', $column)) {
+            $pdo->exec($sql);
+        }
+    }
+}
+
 function transliterator_instance() {
     static $trans = null;
     static $checked = false;

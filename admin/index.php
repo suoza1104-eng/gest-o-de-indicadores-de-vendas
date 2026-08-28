@@ -295,18 +295,30 @@ function campaign_matches_selected($campaignValue, array $selectedCampaigns)
     return best_fuzzy_key_match($rawNorm, $candidateMap, 74.0) !== '';
 }
 
-function fetch_meta_real_daily_rows(PDO $pdo, $integrationId, $dateFrom, $dateTo, array $campaignFilters = array(), $adsetFilter = '')
+function normalize_integration_ids($integrationIds): array
+{
+    $ids = is_array($integrationIds) ? $integrationIds : array($integrationIds);
+    $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+    return $ids ?: array(0);
+}
+
+function integration_filter_sql($integrationIds): string
+{
+    return ' integration_id IN (' . implode(',', normalize_integration_ids($integrationIds)) . ') ';
+}
+
+function fetch_meta_real_daily_rows(PDO $pdo, $integrationIds, $dateFrom, $dateTo, array $campaignFilters = array(), $adsetFilter = '')
 {
     if ($adsetFilter !== '') {
-        $sql = "SELECT report_date, SUM(spend) AS spend, SUM(impressions) AS impressions, SUM(reach) AS reach, AVG(frequency) AS frequency, SUM(clicks) AS clicks, CASE WHEN SUM(clicks) > 0 THEN SUM(spend) / SUM(clicks) ELSE 0 END AS cpc, CASE WHEN SUM(impressions) > 0 THEN (SUM(spend) / SUM(impressions)) * 1000 ELSE 0 END AS cpm FROM meta_adset_daily WHERE integration_id = :integration_id AND report_date BETWEEN :date_from AND :date_to AND adset_name = :adset_name";
-        $params = array(':integration_id' => $integrationId, ':date_from' => $dateFrom, ':date_to' => $dateTo, ':adset_name' => $adsetFilter);
+        $sql = "SELECT report_date, SUM(spend) AS spend, SUM(impressions) AS impressions, SUM(reach) AS reach, AVG(frequency) AS frequency, SUM(clicks) AS clicks, CASE WHEN SUM(clicks) > 0 THEN SUM(spend) / SUM(clicks) ELSE 0 END AS cpc, CASE WHEN SUM(impressions) > 0 THEN (SUM(spend) / SUM(impressions)) * 1000 ELSE 0 END AS cpm FROM meta_adset_daily WHERE " . integration_filter_sql($integrationIds) . " AND report_date BETWEEN :date_from AND :date_to AND adset_name = :adset_name";
+        $params = array(':date_from' => $dateFrom, ':date_to' => $dateTo, ':adset_name' => $adsetFilter);
         if ($campaignFilters) {
             $sql .= build_in_condition($campaignFilters, 'campaign', $params, 'campaign_name');
         }
         $sql .= ' GROUP BY report_date ORDER BY report_date';
     } else {
-        $sql = "SELECT report_date, SUM(spend) AS spend, SUM(impressions) AS impressions, SUM(reach) AS reach, AVG(frequency) AS frequency, SUM(clicks) AS clicks, CASE WHEN SUM(clicks) > 0 THEN SUM(spend) / SUM(clicks) ELSE 0 END AS cpc, CASE WHEN SUM(impressions) > 0 THEN (SUM(spend) / SUM(impressions)) * 1000 ELSE 0 END AS cpm FROM meta_campaign_daily WHERE integration_id = :integration_id AND report_date BETWEEN :date_from AND :date_to";
-        $params = array(':integration_id' => $integrationId, ':date_from' => $dateFrom, ':date_to' => $dateTo);
+        $sql = "SELECT report_date, SUM(spend) AS spend, SUM(impressions) AS impressions, SUM(reach) AS reach, AVG(frequency) AS frequency, SUM(clicks) AS clicks, CASE WHEN SUM(clicks) > 0 THEN SUM(spend) / SUM(clicks) ELSE 0 END AS cpc, CASE WHEN SUM(impressions) > 0 THEN (SUM(spend) / SUM(impressions)) * 1000 ELSE 0 END AS cpm FROM meta_campaign_daily WHERE " . integration_filter_sql($integrationIds) . " AND report_date BETWEEN :date_from AND :date_to";
+        $params = array(':date_from' => $dateFrom, ':date_to' => $dateTo);
         if ($campaignFilters) {
             $sql .= build_in_condition($campaignFilters, 'campaign', $params, 'campaign_name');
         }
@@ -565,12 +577,12 @@ function fetch_manual_attribution_map_by_transaction_codes(PDO $pdo, $model, arr
 }
 
 
-function fetch_meta_hierarchy(PDO $pdo, $integrationId)
+function fetch_meta_hierarchy(PDO $pdo, $integrationIds)
 {
     $hier = array();
-    if (!$integrationId) { return $hier; }
-    $stmt = $pdo->prepare("SELECT campaign_name, adset_name FROM meta_adset_daily WHERE integration_id = :integration_id AND campaign_name <> '' AND adset_name <> '' GROUP BY campaign_name, adset_name ORDER BY campaign_name, adset_name");
-    $stmt->execute(array(':integration_id' => $integrationId));
+    if (!$integrationIds) { return $hier; }
+    $stmt = $pdo->prepare("SELECT campaign_name, adset_name FROM meta_adset_daily WHERE " . integration_filter_sql($integrationIds) . " AND campaign_name <> '' AND adset_name <> '' GROUP BY campaign_name, adset_name ORDER BY campaign_name, adset_name");
+    $stmt->execute();
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         $campaign = trim((string)$row['campaign_name']);
         $adset = trim((string)$row['adset_name']);
@@ -578,8 +590,8 @@ function fetch_meta_hierarchy(PDO $pdo, $integrationId)
         if (!isset($hier[$campaign])) { $hier[$campaign] = array(); }
         if (!isset($hier[$campaign][$adset])) { $hier[$campaign][$adset] = array(); }
     }
-    $stmt = $pdo->prepare("SELECT campaign_name, adset_name, ad_name FROM meta_ad_daily WHERE integration_id = :integration_id AND campaign_name <> '' AND adset_name <> '' AND ad_name <> '' GROUP BY campaign_name, adset_name, ad_name ORDER BY campaign_name, adset_name, ad_name");
-    $stmt->execute(array(':integration_id' => $integrationId));
+    $stmt = $pdo->prepare("SELECT campaign_name, adset_name, ad_name FROM meta_ad_daily WHERE " . integration_filter_sql($integrationIds) . " AND campaign_name <> '' AND adset_name <> '' AND ad_name <> '' GROUP BY campaign_name, adset_name, ad_name ORDER BY campaign_name, adset_name, ad_name");
+    $stmt->execute();
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         $campaign = trim((string)$row['campaign_name']);
         $adset = trim((string)$row['adset_name']);
@@ -626,7 +638,7 @@ function fetch_total_sales_summary(PDO $pdo, $start, $end, $productFilter = '')
     return array('sales' => $sales, 'revenue' => $revenue);
 }
 
-function fetch_meta_period_summary(PDO $pdo, $integrationId, $start, $end)
+function fetch_meta_period_summary(PDO $pdo, $integrationIds, $start, $end)
 {
     $stmt = $pdo->prepare("SELECT COALESCE(SUM(spend),0) AS spend,
                                   COALESCE(SUM(impressions),0) AS impressions,
@@ -634,9 +646,9 @@ function fetch_meta_period_summary(PDO $pdo, $integrationId, $start, $end)
                                   COALESCE(SUM(clicks),0) AS clicks,
                                   COALESCE(SUM(leads),0) AS leads
                            FROM meta_account_daily
-                           WHERE integration_id = :integration_id
+                           WHERE " . integration_filter_sql($integrationIds) . "
                              AND report_date BETWEEN :start AND :end");
-    $stmt->execute(array(':integration_id' => (int)$integrationId, ':start' => $start, ':end' => $end));
+    $stmt->execute(array(':start' => $start, ':end' => $end));
     $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: array();
     return array(
         'spend' => (float)($row['spend'] ?? 0),
@@ -1143,7 +1155,21 @@ function sort_link($params, $field, $label, $currentSort, $currentDir)
 }
 
 $pdo = db();
-$integration = $pdo->query('SELECT * FROM meta_integrations ORDER BY id DESC LIMIT 1')->fetch();
+ensure_meta_integration_schema($pdo);
+$integrations = $pdo->query('SELECT * FROM meta_integrations ORDER BY status ASC, id ASC')->fetchAll(PDO::FETCH_ASSOC);
+$activeIntegrations = array_values(array_filter($integrations, function ($row) {
+    return ($row['status'] ?? 'active') === 'active';
+}));
+$selectedIntegrationId = (int)($_GET['integration_id'] ?? 0);
+$integrationIds = array_map(function ($row) { return (int)$row['id']; }, $selectedIntegrationId > 0 ? array_values(array_filter($integrations, function ($row) use ($selectedIntegrationId) {
+    return (int)$row['id'] === $selectedIntegrationId;
+})) : $activeIntegrations);
+$integrationIds = array_values(array_filter($integrationIds));
+$integration = $selectedIntegrationId > 0
+    ? ($pdo->query('SELECT * FROM meta_integrations WHERE id = ' . (int)$selectedIntegrationId . ' LIMIT 1')->fetch(PDO::FETCH_ASSOC) ?: null)
+    : ($activeIntegrations[0] ?? ($integrations[0] ?? null));
+$integrationIdSql = $integrationIds ? implode(',', array_map('intval', $integrationIds)) : '0';
+$selectedIntegrationLabel = $selectedIntegrationId > 0 && $integration ? (string)$integration['name'] : 'Todas as BMs ativas';
 
 $today = date('Y-m-d');
 $periodA = max(1, (int)($_GET['period_a'] ?? 7));
@@ -1183,31 +1209,31 @@ $topNested = array();
 $manualPendingRows = array();
 $metaHierarchy = array();
 
-if ($integration) {
+if ($integrationIds) {
     ensure_manual_attribution_table($pdo);
-    $metaHierarchy = fetch_meta_hierarchy($pdo, (int)$integration['id']);
-    $stmt = $pdo->prepare('SELECT COALESCE(SUM(spend),0) AS spend, COALESCE(SUM(impressions),0) AS impressions, COALESCE(SUM(clicks),0) AS clicks, COALESCE(SUM(leads),0) AS leads, COALESCE(AVG(cpm),0) AS cpm, COALESCE(AVG(frequency),0) AS frequency FROM meta_campaign_daily WHERE integration_id = :integration_id AND report_date = :report_date');
-    $stmt->execute(array('integration_id' => (int)$integration['id'], 'report_date' => $today));
+    $metaHierarchy = fetch_meta_hierarchy($pdo, $integrationIds);
+    $stmt = $pdo->prepare('SELECT COALESCE(SUM(spend),0) AS spend, COALESCE(SUM(impressions),0) AS impressions, COALESCE(SUM(clicks),0) AS clicks, COALESCE(SUM(leads),0) AS leads, CASE WHEN SUM(impressions) > 0 THEN (SUM(spend) / SUM(impressions)) * 1000 ELSE 0 END AS cpm, CASE WHEN SUM(reach) > 0 THEN SUM(impressions) / SUM(reach) ELSE 0 END AS frequency FROM meta_campaign_daily WHERE integration_id IN (' . $integrationIdSql . ') AND report_date = :report_date');
+    $stmt->execute(array('report_date' => $today));
     $metaCards = $stmt->fetch() ?: $metaCards;
 
-    $stmt = $pdo->prepare('SELECT report_date, SUM(spend) AS spend, SUM(leads) AS leads, AVG(cpm) AS cpm, AVG(frequency) AS frequency FROM meta_campaign_daily WHERE integration_id = :integration_id AND report_date BETWEEN :start AND :end GROUP BY report_date ORDER BY report_date ASC');
-    $stmt->execute(array('integration_id' => (int)$integration['id'], 'start' => date('Y-m-d', strtotime('-29 days')), 'end' => $today));
+    $stmt = $pdo->prepare('SELECT report_date, SUM(spend) AS spend, SUM(leads) AS leads, CASE WHEN SUM(impressions) > 0 THEN (SUM(spend) / SUM(impressions)) * 1000 ELSE 0 END AS cpm, CASE WHEN SUM(reach) > 0 THEN SUM(impressions) / SUM(reach) ELSE 0 END AS frequency FROM meta_campaign_daily WHERE integration_id IN (' . $integrationIdSql . ') AND report_date BETWEEN :start AND :end GROUP BY report_date ORDER BY report_date ASC');
+    $stmt->execute(array('start' => date('Y-m-d', strtotime('-29 days')), 'end' => $today));
     $metaDaily = $stmt->fetchAll();
 
-    $stmt = $pdo->prepare('SELECT report_date, campaign_name, spend, impressions, reach, frequency, clicks, ctr, cpc, cpm, leads, purchases FROM meta_campaign_daily WHERE integration_id = :integration_id AND report_date = :report_date ORDER BY spend DESC, impressions DESC LIMIT 20');
-    $stmt->execute(array('integration_id' => (int)$integration['id'], 'report_date' => $today));
+    $stmt = $pdo->prepare('SELECT report_date, campaign_name, SUM(spend) AS spend, SUM(impressions) AS impressions, SUM(reach) AS reach, CASE WHEN SUM(reach) > 0 THEN SUM(impressions) / SUM(reach) ELSE 0 END AS frequency, SUM(clicks) AS clicks, CASE WHEN SUM(impressions) > 0 THEN SUM(clicks) / SUM(impressions) * 100 ELSE 0 END AS ctr, CASE WHEN SUM(clicks) > 0 THEN SUM(spend) / SUM(clicks) ELSE 0 END AS cpc, CASE WHEN SUM(impressions) > 0 THEN SUM(spend) / SUM(impressions) * 1000 ELSE 0 END AS cpm, SUM(leads) AS leads, SUM(purchases) AS purchases FROM meta_campaign_daily WHERE integration_id IN (' . $integrationIdSql . ') AND report_date = :report_date GROUP BY report_date, campaign_name ORDER BY spend DESC, impressions DESC LIMIT 20');
+    $stmt->execute(array('report_date' => $today));
     $metaCampaignRows = $stmt->fetchAll();
 
-    $stmt = $pdo->prepare('SELECT * FROM meta_sync_runs WHERE integration_id = :integration_id ORDER BY id DESC LIMIT 15');
-    $stmt->execute(array('integration_id' => (int)$integration['id']));
+    $stmt = $pdo->prepare('SELECT * FROM meta_sync_runs WHERE integration_id IN (' . $integrationIdSql . ') ORDER BY id DESC LIMIT 15');
+    $stmt->execute();
     $recentRuns = $stmt->fetchAll();
 
     if (table_exists($pdo, 'attribution_runs')) {
         $recentAttrRuns = $pdo->query('SELECT * FROM attribution_runs ORDER BY id DESC LIMIT 20')->fetchAll();
     }
 
-    $campaignStmt = $pdo->prepare("SELECT DISTINCT campaign_name FROM meta_campaign_daily WHERE integration_id = :integration_id AND campaign_name <> '' ORDER BY campaign_name");
-    $campaignStmt->execute(array('integration_id' => (int)$integration['id']));
+    $campaignStmt = $pdo->prepare("SELECT DISTINCT campaign_name FROM meta_campaign_daily WHERE integration_id IN (" . $integrationIdSql . ") AND campaign_name <> '' ORDER BY campaign_name");
+    $campaignStmt->execute();
     $campaignOptions = array_column($campaignStmt->fetchAll(), 'campaign_name');
 
     $adsetSql = "SELECT DISTINCT campaign_name FROM attribution_campaign_daily WHERE attribution_model = :model AND campaign_name <> ''";
@@ -1224,7 +1250,7 @@ if ($integration) {
     $salesWhere = ' WHERE m.attribution_model = :model AND m.sale_date BETWEEN :start_dt AND :end_dt';
     $salesParams = array('model' => $attributionModel, 'start_dt' => $rangeStart . ' 00:00:00', 'end_dt' => $rangeEnd . ' 23:59:59');
 
-    $metaAggRows = fetch_meta_real_daily_rows($pdo, (int)$integration['id'], $rangeStart, $rangeEnd, $campaignFilters, $adsetFilter);
+    $metaAggRows = fetch_meta_real_daily_rows($pdo, $integrationIds, $rangeStart, $rangeEnd, $campaignFilters, $adsetFilter);
     $leadAggRows = fetch_attr_lead_daily_rows($pdo, $rangeStart, $rangeEnd, $campaignFilters, $adsetFilter);
     $salesAggRows = fetch_attr_sales_daily_rows($pdo, $attributionModel, $rangeStart, $rangeEnd, $campaignFilters, $adsetFilter, $productFilter);
 
@@ -1261,8 +1287,8 @@ if ($integration) {
         $currStart = date('Y-m-d', strtotime($rangeEnd . ' -' . ($period['a'] - 1) . ' days'));
         $baseStart = date('Y-m-d', strtotime($rangeEnd . ' -' . ($period['b'] - 1) . ' days'));
 
-        $curMeta = fetch_meta_period_summary($pdo, (int)$integration['id'], $currStart, $rangeEnd);
-        $basMeta = fetch_meta_period_summary($pdo, (int)$integration['id'], $baseStart, $rangeEnd);
+        $curMeta = fetch_meta_period_summary($pdo, $integrationIds, $currStart, $rangeEnd);
+        $basMeta = fetch_meta_period_summary($pdo, $integrationIds, $baseStart, $rangeEnd);
         $curSales = fetch_total_sales_summary($pdo, $currStart, $rangeEnd, $productFilter);
         $basSales = fetch_total_sales_summary($pdo, $baseStart, $rangeEnd, $productFilter);
 
@@ -1309,13 +1335,12 @@ if ($integration) {
     $metaCampaignStmt = $pdo->prepare("
         SELECT campaign_name, SUM(spend) AS spend
         FROM meta_campaign_daily
-        WHERE integration_id = :integration_id
+        WHERE integration_id IN ($integrationIdSql)
           AND report_date BETWEEN :start AND :end
         GROUP BY campaign_name
         ORDER BY SUM(spend) DESC, campaign_name ASC
     ");
     $metaCampaignStmt->execute(array(
-        'integration_id' => (int)$integration['id'],
         'start' => $rangeStart,
         'end' => $rangeEnd,
     ));
@@ -1341,13 +1366,12 @@ if ($integration) {
     $metaAdsetStmt = $pdo->prepare("
         SELECT campaign_name, adset_name, SUM(spend) AS spend
         FROM meta_adset_daily
-        WHERE integration_id = :integration_id
+        WHERE integration_id IN ($integrationIdSql)
           AND report_date BETWEEN :start AND :end
         GROUP BY campaign_name, adset_name
         ORDER BY campaign_name ASC, SUM(spend) DESC, adset_name ASC
     ");
     $metaAdsetStmt->execute(array(
-        'integration_id' => (int)$integration['id'],
         'start' => $rangeStart,
         'end' => $rangeEnd,
     ));
@@ -1381,13 +1405,12 @@ if ($integration) {
     $metaAdStmt = $pdo->prepare("
         SELECT campaign_name, adset_name, ad_name, SUM(spend) AS spend
         FROM meta_ad_daily
-        WHERE integration_id = :integration_id
+        WHERE integration_id IN ($integrationIdSql)
           AND report_date BETWEEN :start AND :end
         GROUP BY campaign_name, adset_name, ad_name
         ORDER BY campaign_name ASC, adset_name ASC, SUM(spend) DESC, ad_name ASC
     ");
     $metaAdStmt->execute(array(
-        'integration_id' => (int)$integration['id'],
         'start' => $rangeStart,
         'end' => $rangeEnd,
     ));
@@ -1861,21 +1884,21 @@ $attrChart = array(
         </div>
 
         <nav class="p-3 space-y-1.5 flex-1">
-            <button type="button" class="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-medium text-sm text-slate-300 hover:bg-white/5 transition-all text-left group active" data-section-target="dashboard">
+            <button type="button" class="nav-item active" data-section-target="dashboard">
                 <div class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-400 group-hover:bg-indigo-600/20 group-hover:text-indigo-400 transition-colors">
                     <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
                 </div>
-                <span class="sidebar-label">Indicadores Reais</span>
+                <span class="sidebar-label">Indicadores</span>
             </button>
 
-            <button type="button" class="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-medium text-sm text-slate-300 hover:bg-white/5 transition-all text-left group" data-section-target="campaigns">
+            <button type="button" class="nav-item" data-section-target="campaigns">
                 <div class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-400 group-hover:bg-indigo-600/20 group-hover:text-indigo-400 transition-colors">
                     <i data-lucide="target" class="w-4 h-4"></i>
                 </div>
                 <span class="sidebar-label">Campanhas & Vendas</span>
             </button>
 
-            <button type="button" class="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-medium text-sm text-slate-300 hover:bg-white/5 transition-all text-left group" data-section-target="settings">
+            <button type="button" class="nav-item" data-section-target="settings">
                 <div class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-400 group-hover:bg-indigo-600/20 group-hover:text-indigo-400 transition-colors">
                     <i data-lucide="settings" class="w-4 h-4"></i>
                 </div>
@@ -1909,6 +1932,9 @@ $attrChart = array(
             </div>
 
             <div class="flex items-center gap-3">
+                <button type="button" class="btn-pro btn-secondary btn-sm" data-theme-toggle title="Alternar tema">
+                    <i data-lucide="sun-moon" class="w-4 h-4"></i>
+                </button>
                 <a href="upload_hotmart.php" class="btn-pro btn-emerald btn-sm">
                     <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
                     <span class="hidden sm:inline">Importar CSV Hotmart</span>
@@ -1923,6 +1949,7 @@ $attrChart = array(
         <!-- Main Body Workspace -->
         <div class="p-6 md:p-8 max-w-[1700px] mx-auto w-full space-y-8">
             
+            <div class="app-section hidden" data-app-section="settings">
             <!-- SECTION 1: CONFIGURAÇÕES DE INTEGRAÇÃO (data-app-group="settings") -->
             <section class="glass-card space-y-6">
                 <div class="flex items-center justify-between pb-4 border-b border-white/10">
@@ -1934,6 +1961,52 @@ $attrChart = array(
                             <h2 class="text-xl font-bold text-white">Configurar Integração Meta Graph API</h2>
                             <p class="text-xs text-slate-400">Credenciais de acesso, conta de anúncios e sincronizações em segundo plano</p>
                         </div>
+                    </div>
+                </div>
+
+                <div class="integration-list">
+                    <div class="flex items-center justify-between gap-3">
+                        <h3 class="text-sm font-bold text-white">Integrações Meta Ads (Graph API)</h3>
+                        <button type="button" class="btn-pro btn-secondary btn-sm" data-new-integration>
+                            <i data-lucide="plus" class="w-4 h-4"></i>
+                            <span>Nova BM / Conta Meta</span>
+                        </button>
+                    </div>
+                    <div class="space-y-3 mt-3">
+                        <?php if (!$integrations): ?>
+                            <div class="text-sm text-slate-400 border border-white/10 rounded-lg p-4">Nenhuma integração cadastrada.</div>
+                        <?php else: foreach ($integrations as $item): ?>
+                            <?php
+                                $itemCurrency = (string)($item['currency_code'] ?? 'BRL');
+                                $itemSpread = (float)($item['currency_spread_percent'] ?? 0);
+                                $itemRate = (float)($item['manual_exchange_rate'] ?? 0);
+                            ?>
+                            <div class="integration-row">
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <strong class="text-white"><?= h((string)($item['name'] ?? 'Meta Principal')) ?></strong>
+                                        <span class="badge <?= (($item['status'] ?? 'active') === 'active') ? 'badge-emerald' : 'badge-rose' ?>"><?= (($item['status'] ?? 'active') === 'active') ? 'Ativa' : 'Inativa' ?></span>
+                                        <span class="badge badge-indigo"><?= h((string)($item['ad_account_id'] ?? '')) ?></span>
+                                        <span class="badge badge-amber"><?= h($itemCurrency) ?><?= $itemCurrency === 'USD' ? ' + spread ' . number_format($itemSpread, 2, ',', '.') . '%' : '' ?></span>
+                                    </div>
+                                    <p class="text-xs text-slate-400 mt-1">
+                                        Intervalo: <?= (int)($item['sync_interval_minutes'] ?? 30) ?> min |
+                                        Último sincronismo: <?= h((string)($item['last_success_sync_at'] ?? $item['last_sync_at'] ?? 'nunca')) ?>
+                                        <?= $itemRate > 0 ? ' | USD: R$ ' . number_format($itemRate, 4, ',', '.') : '' ?>
+                                    </p>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <button type="button" class="btn-pro btn-secondary btn-sm" data-sync-integration="<?= (int)$item['id'] ?>">
+                                        <i data-lucide="zap" class="w-4 h-4"></i>
+                                        <span>Sincronizar</span>
+                                    </button>
+                                    <button type="button" class="btn-pro btn-secondary btn-sm" data-edit-integration='<?= h(json_encode($item, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>'>
+                                        <i data-lucide="pencil" class="w-4 h-4"></i>
+                                        <span>Editar</span>
+                                    </button>
+                                </div>
+                            </div>
+                        <?php endforeach; endif; ?>
                     </div>
                 </div>
 
@@ -1987,6 +2060,24 @@ $attrChart = array(
                         </div>
 
                         <div class="form-group">
+                            <label class="form-label">Moeda da BM</label>
+                            <select name="currency_code" class="pro-select">
+                                <option value="BRL" <?= (($integration['currency_code'] ?? 'BRL') === 'BRL') ? 'selected' : '' ?>>BRL</option>
+                                <option value="USD" <?= (($integration['currency_code'] ?? '') === 'USD') ? 'selected' : '' ?>>USD</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Spread (%)</label>
+                            <input type="number" name="currency_spread_percent" min="0" step="0.01" value="<?= h((string)($integration['currency_spread_percent'] ?? '0')) ?>" class="pro-input">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Cotação USD Manual</label>
+                            <input type="number" name="manual_exchange_rate" min="0" step="0.0001" value="<?= h((string)($integration['manual_exchange_rate'] ?? '')) ?>" placeholder="Ex.: 5.42" class="pro-input">
+                        </div>
+
+                        <div class="form-group">
                             <label class="form-label">Histórico Meta (dias)</label>
                             <input type="number" id="meta-history-days" min="1" max="180" value="30" class="pro-input">
                         </div>
@@ -2029,6 +2120,9 @@ $attrChart = array(
                 <div id="feedback" class="hidden"></div>
             </section>
 
+            </div>
+
+            <div class="app-section" data-app-section="dashboard">
             <!-- SECTION 2: META HOJE - CARDS DE MÉTRICAS -->
             <div class="space-y-4">
                 <div class="flex items-center justify-between">
@@ -2118,6 +2212,18 @@ $attrChart = array(
                 </div>
 
                 <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    <div class="form-group">
+                        <label class="form-label">BM / Conta Meta</label>
+                        <select name="integration_id" class="pro-select">
+                            <option value="0" <?= $selectedIntegrationId === 0 ? 'selected' : '' ?>>Todas as BMs ativas</option>
+                            <?php foreach ($integrations as $item): ?>
+                                <option value="<?= (int)$item['id'] ?>" <?= $selectedIntegrationId === (int)$item['id'] ? 'selected' : '' ?>>
+                                    <?= h((string)($item['name'] ?? 'Integração')) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
                     <div class="form-group">
                         <label class="form-label">Modelo de Atribuição</label>
                         <select name="model" class="pro-select">
@@ -2407,6 +2513,9 @@ $attrChart = array(
                 </div>
             </section>
 
+            </div>
+
+            <div class="app-section hidden" data-app-section="campaigns">
             <!-- SECTION 10: TABELA HIERÁRQUICA DE ESTRUTURA -->
             <section class="glass-card space-y-4" data-app-group="campaigns">
                 <div class="flex items-center justify-between pb-3 border-b border-white/10">
@@ -2698,6 +2807,9 @@ $attrChart = array(
                 </div>
             </section>
 
+            </div>
+
+            <div class="app-section hidden" data-app-section="settings">
             <!-- SECTION 14 & 15: HISTÓRICO DE LOGS DE SINCRONIZAÇÃO -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <section class="glass-card space-y-3">
@@ -2751,6 +2863,7 @@ $attrChart = array(
                         </table>
                     </div>
                 </section>
+            </div>
             </div>
 
         </div>
