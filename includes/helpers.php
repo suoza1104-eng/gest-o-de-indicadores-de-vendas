@@ -135,9 +135,11 @@ function table_exists($pdo, $table) {
 
 function column_exists(PDO $pdo, string $table, string $column): bool
 {
-    $stmt = $pdo->prepare('SHOW COLUMNS FROM `' . str_replace('`', '', $table) . '` LIKE :column_name');
-    $stmt->execute([':column_name' => $column]);
-    return (bool) $stmt->fetchColumn();
+    $table = str_replace('`', '', $table);
+    $quotedColumn = $pdo->quote($column);
+    $sql = 'SHOW COLUMNS FROM `' . $table . '` LIKE ' . $quotedColumn;
+    $stmt = $pdo->query($sql);
+    return $stmt ? (bool) $stmt->fetchColumn() : false;
 }
 
 function ensure_meta_integration_schema(PDO $pdo): void
