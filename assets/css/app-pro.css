@@ -464,6 +464,31 @@ body {
     border-color: rgba(244, 63, 94, 0.55);
 }
 
+/* Integration (BM) list */
+.integration-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 14px 16px;
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.integration-row:hover {
+    border-color: var(--border-highlight);
+    background: var(--bg-card-hover);
+}
+
+.integration-modal-container {
+    max-width: 760px;
+    max-height: 88vh;
+    overflow-y: auto;
+}
+
 .btn-sm {
     padding: 6px 12px;
     font-size: 12px;

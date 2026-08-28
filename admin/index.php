@@ -2033,6 +2033,16 @@ $attrChart = array(
                         <?php endforeach; endif; ?>
                     </div>
                 </div>
+            </section>
+
+            <div class="modal-overlay" id="integration-modal">
+                <div class="modal-container integration-modal-container">
+                    <div class="flex items-center justify-between pb-4 border-b border-white/10 mb-5">
+                        <h3 class="text-lg font-bold text-white" id="integration-modal-title">Nova Integração Meta Ads</h3>
+                        <button type="button" class="btn-pro btn-secondary btn-sm" id="integration-modal-close">
+                            <i data-lucide="x" class="w-4 h-4"></i>
+                        </button>
+                    </div>
 
                 <form id="integration-form" class="space-y-6">
                     <input type="hidden" name="id" value="<?= h((string)($integration['id'] ?? '')) ?>">
@@ -2142,7 +2152,8 @@ $attrChart = array(
                     </div>
                 </form>
                 <div id="feedback" class="hidden"></div>
-            </section>
+                </div>
+            </div>
 
             </div>
 

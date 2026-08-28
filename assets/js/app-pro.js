@@ -132,6 +132,7 @@ document.addEventListener('DOMContentLoaded', function () {
             setButtonLoading(submitBtn, false);
             if (data.ok) {
                 showToast(data.message || 'Integracão salva com sucesso!', 'success');
+                setTimeout(() => location.reload(), 900);
             } else {
                 showToast(data.message || 'Erro ao salvar integração.', 'error');
             }
@@ -319,6 +320,10 @@ document.addEventListener('DOMContentLoaded', function () {
             currency_code: 'BRL', currency_spread_percent: 0, manual_exchange_rate: ''
         };
 
+        const integrationModal = document.getElementById('integration-modal');
+        const integrationModalTitle = document.getElementById('integration-modal-title');
+        const integrationModalClose = document.getElementById('integration-modal-close');
+
         function fillIntegrationForm(data) {
             Object.keys(integrationDefaults).forEach((key) => {
                 const field = integrationForm.querySelector('[name="' + key + '"]');
@@ -328,11 +333,24 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
 
+        function openIntegrationModal(title) {
+            if (integrationModalTitle) integrationModalTitle.textContent = title;
+            if (integrationModal) integrationModal.classList.add('active');
+        }
+
+        if (integrationModalClose) {
+            integrationModalClose.addEventListener('click', () => integrationModal.classList.remove('active'));
+        }
+        if (integrationModal) {
+            integrationModal.addEventListener('click', (e) => {
+                if (e.target === integrationModal) integrationModal.classList.remove('active');
+            });
+        }
+
         document.querySelectorAll('[data-new-integration]').forEach((btn) => {
             btn.addEventListener('click', () => {
                 fillIntegrationForm(null);
-                integrationForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                showToast('Preencha os dados da nova BM e clique em Salvar Configurações.', 'info');
+                openIntegrationModal('Nova Integração Meta Ads');
             });
         });
 
@@ -341,8 +359,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 try {
                     const data = JSON.parse(btn.getAttribute('data-edit-integration'));
                     fillIntegrationForm(data);
-                    integrationForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    showToast('Editando "' + (data.name || '') + '". Ajuste os campos e clique em Salvar.', 'info');
+                    openIntegrationModal('Editar Integração: ' + (data.name || ''));
                 } catch (e) {
                     showToast('Não foi possível carregar os dados dessa integração.', 'error');
                 }
