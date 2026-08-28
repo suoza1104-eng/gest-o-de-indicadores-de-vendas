@@ -1,0 +1,5 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home1/prof2543/public_html/
+    - /bin/rsync -a --delete --exclude='.git' --exclude='.cpanel.yml' --exclude='config/config.php' --exclude='logs/' --exclude='api/error_log' --exclude='admin/error_log' ./ $DEPLOYPATH
