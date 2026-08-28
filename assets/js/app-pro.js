@@ -320,37 +320,59 @@ document.addEventListener('DOMContentLoaded', function () {
             currency_code: 'BRL', currency_spread_percent: 0, manual_exchange_rate: ''
         };
 
-        const integrationModal = document.getElementById('integration-modal');
-        const integrationModalTitle = document.getElementById('integration-modal-title');
-        const integrationModalClose = document.getElementById('integration-modal-close');
+        const integrationEditor = document.getElementById('integration-editor');
+        const integrationEditorTitle = document.getElementById('integration-editor-title');
+        const integrationEditorCancel = document.getElementById('integration-editor-cancel');
+        const currencySelect = integrationForm.querySelector('[data-currency-select]');
+        const currencyFields = Array.from(integrationForm.querySelectorAll('[data-currency-field]'));
+        const secretFields = ['access_token', 'app_secret'];
+
+        function updateCurrencyFieldsVisibility() {
+            const isUsd = currencySelect && currencySelect.value === 'USD';
+            currencyFields.forEach((field) => field.classList.toggle('hidden', !isUsd));
+        }
 
         function fillIntegrationForm(data) {
             Object.keys(integrationDefaults).forEach((key) => {
                 const field = integrationForm.querySelector('[name="' + key + '"]');
                 if (!field) return;
+                if (secretFields.includes(key)) {
+                    field.value = '';
+                    return;
+                }
                 const value = data && data[key] !== undefined && data[key] !== null ? data[key] : integrationDefaults[key];
                 field.value = value;
             });
+            updateCurrencyFieldsVisibility();
         }
 
-        function openIntegrationModal(title) {
-            if (integrationModalTitle) integrationModalTitle.textContent = title;
-            if (integrationModal) integrationModal.classList.add('active');
+        if (currencySelect) {
+            currencySelect.addEventListener('change', updateCurrencyFieldsVisibility);
         }
 
-        if (integrationModalClose) {
-            integrationModalClose.addEventListener('click', () => integrationModal.classList.remove('active'));
+        function openIntegrationEditor(title) {
+            if (integrationEditorTitle) {
+                const span = integrationEditorTitle.querySelector('span');
+                if (span) span.textContent = title; else integrationEditorTitle.textContent = title;
+            }
+            if (integrationEditor) {
+                integrationEditor.classList.remove('hidden');
+                integrationEditor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
         }
-        if (integrationModal) {
-            integrationModal.addEventListener('click', (e) => {
-                if (e.target === integrationModal) integrationModal.classList.remove('active');
-            });
+
+        function closeIntegrationEditor() {
+            if (integrationEditor) integrationEditor.classList.add('hidden');
+        }
+
+        if (integrationEditorCancel) {
+            integrationEditorCancel.addEventListener('click', closeIntegrationEditor);
         }
 
         document.querySelectorAll('[data-new-integration]').forEach((btn) => {
             btn.addEventListener('click', () => {
                 fillIntegrationForm(null);
-                openIntegrationModal('Nova Integração Meta Ads');
+                openIntegrationEditor('Nova Integração Meta Ads');
             });
         });
 
@@ -359,7 +381,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 try {
                     const data = JSON.parse(btn.getAttribute('data-edit-integration'));
                     fillIntegrationForm(data);
-                    openIntegrationModal('Editar Integração: ' + (data.name || ''));
+                    openIntegrationEditor('Editar BM / Conta Meta: ' + (data.name || ''));
                 } catch (e) {
                     showToast('Não foi possível carregar os dados dessa integração.', 'error');
                 }

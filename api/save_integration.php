@@ -32,6 +32,20 @@ try {
     }
 
     if ($id > 0) {
+        $existingStmt = $pdo->prepare('SELECT access_token, app_secret FROM meta_integrations WHERE id = :id LIMIT 1');
+        $existingStmt->execute(['id' => $id]);
+        $existing = $existingStmt->fetch();
+        if ($existing) {
+            if ($accessToken === '') {
+                $accessToken = (string) ($existing['access_token'] ?? '');
+            }
+            if ($appSecret === '') {
+                $appSecret = (string) ($existing['app_secret'] ?? '');
+            }
+        }
+    }
+
+    if ($id > 0) {
         $sql = 'UPDATE meta_integrations SET
             name = :name,
             app_id = :app_id,

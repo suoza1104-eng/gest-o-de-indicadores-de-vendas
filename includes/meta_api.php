@@ -512,13 +512,55 @@ function finish_sync_run($pdo, int $syncRunId, string $status, int $rowsUpserted
     ]);
 }
 
+function fetch_live_usd_brl_rate(): ?float
+{
+    static $fetched = false;
+    static $cached = null;
+
+    if ($fetched) {
+        return $cached;
+    }
+    $fetched = true;
+
+    $ch = curl_init('https://economia.awesomeapi.com.br/last/USD-BRL');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 6,
+        CURLOPT_CONNECTTIMEOUT => 4,
+        CURLOPT_SSL_VERIFYPEER => true,
+    ]);
+    $body = curl_exec($ch);
+    $errno = curl_errno($ch);
+    curl_close($ch);
+
+    if ($errno !== 0 || !$body) {
+        return null;
+    }
+
+    $decoded = json_decode((string) $body, true);
+    $bid = $decoded['USDBRL']['bid'] ?? null;
+    if ($bid === null || !is_numeric($bid)) {
+        return null;
+    }
+
+    $cached = (float) $bid;
+    return $cached;
+}
+
 function apply_integration_currency_conversion(array $row, array $integration): array
 {
     $currency = strtoupper((string)($integration['currency_code'] ?? 'BRL'));
-    $rate = (float)($integration['manual_exchange_rate'] ?? 0);
-    $spread = (float)($integration['currency_spread_percent'] ?? 0);
+    if ($currency !== 'USD') {
+        return $row;
+    }
 
-    if ($currency !== 'USD' || $rate <= 0) {
+    $spread = (float)($integration['currency_spread_percent'] ?? 0);
+    $rate = (float)($integration['manual_exchange_rate'] ?? 0);
+    if ($rate <= 0) {
+        $rate = fetch_live_usd_brl_rate() ?? 0;
+    }
+
+    if ($rate <= 0) {
         return $row;
     }
 

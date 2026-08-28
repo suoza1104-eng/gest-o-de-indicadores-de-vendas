@@ -1160,6 +1160,14 @@ $integrations = $pdo->query('SELECT * FROM meta_integrations ORDER BY status ASC
 $activeIntegrations = array_values(array_filter($integrations, function ($row) {
     return ($row['status'] ?? 'active') === 'active';
 }));
+$allIntegrationIdsForStats = array_map(function ($row) { return (int)$row['id']; }, $integrations);
+$integrationSyncedCampaignsCount = 0;
+$integrationLastSyncOverall = null;
+if ($allIntegrationIdsForStats) {
+    $statsIdsSql = implode(',', $allIntegrationIdsForStats);
+    $integrationSyncedCampaignsCount = (int) $pdo->query("SELECT COUNT(DISTINCT campaign_name) FROM meta_campaign_daily WHERE integration_id IN ($statsIdsSql) AND campaign_name <> ''")->fetchColumn();
+    $integrationLastSyncOverall = $pdo->query("SELECT MAX(last_success_sync_at) FROM meta_integrations WHERE id IN ($statsIdsSql)")->fetchColumn();
+}
 $selectedIntegrationId = (int)($_GET['integration_id'] ?? 0);
 $integrationIds = array_map(function ($row) { return (int)$row['id']; }, $selectedIntegrationId > 0 ? array_values(array_filter($integrations, function ($row) use ($selectedIntegrationId) {
     return (int)$row['id'] === $selectedIntegrationId;
@@ -1974,6 +1982,37 @@ $attrChart = array(
                     </div>
                 </div>
 
+                <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <span class="kpi-label">Business Managers (BMs)</span>
+                            <div class="kpi-icon-box"><i data-lucide="layers" class="w-4 h-4"></i></div>
+                        </div>
+                        <div class="kpi-value"><?= count($integrations) ?></div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <span class="kpi-label">Contas / BMs Ativas</span>
+                            <div class="kpi-icon-box emerald"><i data-lucide="check-circle-2" class="w-4 h-4"></i></div>
+                        </div>
+                        <div class="kpi-value"><?= count($activeIntegrations) ?></div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <span class="kpi-label">Campanhas Sincronizadas</span>
+                            <div class="kpi-icon-box cyan"><i data-lucide="target" class="w-4 h-4"></i></div>
+                        </div>
+                        <div class="kpi-value"><?= $integrationSyncedCampaignsCount ?></div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <span class="kpi-label">Último Sincronismo Geral</span>
+                            <div class="kpi-icon-box amber"><i data-lucide="clock" class="w-4 h-4"></i></div>
+                        </div>
+                        <div class="kpi-value" style="font-size: 14px;"><?= h((string)($integrationLastSyncOverall ?: 'nunca')) ?></div>
+                    </div>
+                </div>
+
                 <div class="integration-list">
                     <div class="flex items-center justify-between gap-3">
                         <h3 class="text-sm font-bold text-white">Integrações Meta Ads (Graph API)</h3>
@@ -1988,6 +2027,129 @@ $attrChart = array(
                             </button>
                         </div>
                     </div>
+
+                    <div id="integration-editor" class="integration-editor hidden">
+                        <div class="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
+                            <h4 id="integration-editor-title" class="text-sm font-bold text-white flex items-center gap-2">
+                                <i data-lucide="pencil" class="w-4 h-4 text-indigo-400"></i>
+                                <span>Nova Integração Meta Ads</span>
+                            </h4>
+                            <button type="button" id="integration-editor-cancel" class="btn-pro btn-secondary btn-sm">
+                                <span>Cancelar</span>
+                            </button>
+                        </div>
+                        <form id="integration-form" class="space-y-6">
+                            <input type="hidden" name="id" value="">
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div class="form-group">
+                                    <label class="form-label">Nome da BM / Conta</label>
+                                    <input type="text" name="name" placeholder="Ex.: BM - Dólar" required class="pro-input">
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label">ID da Conta de Anúncios (act_...)</label>
+                                    <input type="text" name="ad_account_id" placeholder="act_123456789" required class="pro-input font-mono">
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label">Meta App ID (opcional)</label>
+                                    <input type="text" name="app_id" placeholder="123456789" class="pro-input font-mono">
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label">Meta App Secret (opcional)</label>
+                                    <input type="text" name="app_secret" placeholder="App Secret" class="pro-input font-mono" autocomplete="off">
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Meta Access Token (Graph API)</label>
+                                <textarea name="access_token" rows="3" placeholder="Manter token atual (deixe em branco para não alterar)" class="pro-textarea font-mono text-xs" autocomplete="off"></textarea>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                                <div class="form-group">
+                                    <label class="form-label">Moeda da Conta de Anúncios</label>
+                                    <select name="currency_code" class="pro-select" data-currency-select>
+                                        <option value="BRL">BRL (Real)</option>
+                                        <option value="USD">USD (Dólar - Conta Simple/Internacional)</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group" data-currency-field>
+                                    <label class="form-label">Spread da Conta % (margem simples/IOF)</label>
+                                    <input type="number" name="currency_spread_percent" min="0" step="0.01" value="0" class="pro-input">
+                                </div>
+
+                                <div class="form-group" data-currency-field>
+                                    <label class="form-label">Cotação USD Manual</label>
+                                    <input type="number" name="manual_exchange_rate" min="0" step="0.0001" placeholder="Vazio = cotação automática" class="pro-input">
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label">Intervalo Sync (min)</label>
+                                    <input type="number" name="sync_interval_minutes" min="5" value="30" class="pro-input">
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label">Status da Integração</label>
+                                    <select name="status" class="pro-select">
+                                        <option value="active">Ativa (Sincronizando)</option>
+                                        <option value="inactive">Inativa (Pausada)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div class="form-group">
+                                    <label class="form-label">Fuso Horário</label>
+                                    <input type="text" name="timezone" value="America/Sao_Paulo" class="pro-input">
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label">Histórico Meta (dias)</label>
+                                    <input type="number" id="meta-history-days" min="1" max="180" value="30" class="pro-input">
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label">Histórico Atribuição (dias)</label>
+                                    <input type="number" id="attr-history-days" min="1" max="365" value="90" class="pro-input">
+                                </div>
+                            </div>
+
+                            <div class="flex flex-wrap items-center gap-3 pt-4 border-t border-white/10">
+                                <button type="submit" class="btn-pro btn-primary">
+                                    <i data-lucide="save" class="w-4 h-4"></i>
+                                    <span>Salvar Alterações</span>
+                                </button>
+                                <button type="button" id="btn-test" class="btn-pro btn-secondary">
+                                    <i data-lucide="wifi" class="w-4 h-4"></i>
+                                    <span>Testar Conexão Meta</span>
+                                </button>
+                                <button type="button" id="btn-sync" class="btn-pro btn-secondary">
+                                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                                    <span>Sincronizar Meta (3d)</span>
+                                </button>
+                                <button type="button" id="btn-attr-sync" class="btn-pro btn-secondary">
+                                    <i data-lucide="git-merge" class="w-4 h-4"></i>
+                                    <span>Sincronizar Atribuição (3d)</span>
+                                </button>
+                                <button type="button" id="btn-sync-all" class="btn-pro btn-emerald">
+                                    <i data-lucide="zap" class="w-4 h-4"></i>
+                                    <span>Sincronizar Tudo (3d)</span>
+                                </button>
+                                <button type="button" id="btn-sync-history" class="btn-pro btn-secondary text-xs">
+                                    Carga Histórica Meta
+                                </button>
+                                <button type="button" id="btn-attr-history" class="btn-pro btn-secondary text-xs">
+                                    Carga Histórica Atribuição
+                                </button>
+                            </div>
+                        </form>
+                        <div id="feedback" class="hidden"></div>
+                    </div>
+
                     <div class="space-y-3 mt-3">
                         <?php if (!$integrations): ?>
                             <div class="text-sm text-slate-400 border border-white/10 rounded-lg p-4">Nenhuma integração cadastrada.</div>
@@ -2034,126 +2196,6 @@ $attrChart = array(
                     </div>
                 </div>
             </section>
-
-            <div class="modal-overlay" id="integration-modal">
-                <div class="modal-container integration-modal-container">
-                    <div class="flex items-center justify-between pb-4 border-b border-white/10 mb-5">
-                        <h3 class="text-lg font-bold text-white" id="integration-modal-title">Nova Integração Meta Ads</h3>
-                        <button type="button" class="btn-pro btn-secondary btn-sm" id="integration-modal-close">
-                            <i data-lucide="x" class="w-4 h-4"></i>
-                        </button>
-                    </div>
-
-                <form id="integration-form" class="space-y-6">
-                    <input type="hidden" name="id" value="<?= h((string)($integration['id'] ?? '')) ?>">
-                    
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div class="form-group">
-                            <label class="form-label">Nome da Integração</label>
-                            <input type="text" name="name" value="<?= h($integration['name'] ?? 'Meta Principal') ?>" required class="pro-input">
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Ad Account ID</label>
-                            <input type="text" name="ad_account_id" value="<?= h($integration['ad_account_id'] ?? '') ?>" placeholder="act_123456789" required class="pro-input font-mono">
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">App ID</label>
-                            <input type="text" name="app_id" value="<?= h($integration['app_id'] ?? '') ?>" class="pro-input font-mono">
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">App Secret</label>
-                            <input type="text" name="app_secret" value="<?= h($integration['app_secret'] ?? '') ?>" class="pro-input font-mono">
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label">System User Access Token</label>
-                        <textarea name="access_token" rows="3" placeholder="Cole aqui o token de longa duração da Meta" class="pro-textarea font-mono text-xs"><?= h($integration['access_token'] ?? '') ?></textarea>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                        <div class="form-group">
-                            <label class="form-label">Intervalo Sync (min)</label>
-                            <input type="number" name="sync_interval_minutes" min="5" value="<?= h((string)($integration['sync_interval_minutes'] ?? 30)) ?>" class="pro-input">
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Status</label>
-                            <select name="status" class="pro-select">
-                                <option value="active" <?= (($integration['status'] ?? 'active') === 'active') ? 'selected' : '' ?>>Ativa</option>
-                                <option value="inactive" <?= (($integration['status'] ?? '') === 'inactive') ? 'selected' : '' ?>>Inativa</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Fuso Horário</label>
-                            <input type="text" name="timezone" value="<?= h($integration['timezone'] ?? 'America/Sao_Paulo') ?>" class="pro-input">
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Moeda da BM</label>
-                            <select name="currency_code" class="pro-select">
-                                <option value="BRL" <?= (($integration['currency_code'] ?? 'BRL') === 'BRL') ? 'selected' : '' ?>>BRL</option>
-                                <option value="USD" <?= (($integration['currency_code'] ?? '') === 'USD') ? 'selected' : '' ?>>USD</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Spread (%)</label>
-                            <input type="number" name="currency_spread_percent" min="0" step="0.01" value="<?= h((string)($integration['currency_spread_percent'] ?? '0')) ?>" class="pro-input">
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Cotação USD Manual</label>
-                            <input type="number" name="manual_exchange_rate" min="0" step="0.0001" value="<?= h((string)($integration['manual_exchange_rate'] ?? '')) ?>" placeholder="Ex.: 5.42" class="pro-input">
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Histórico Meta (dias)</label>
-                            <input type="number" id="meta-history-days" min="1" max="180" value="30" class="pro-input">
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Histórico Atribuição (dias)</label>
-                            <input type="number" id="attr-history-days" min="1" max="365" value="90" class="pro-input">
-                        </div>
-                    </div>
-
-                    <div class="flex flex-wrap items-center gap-3 pt-4 border-t border-white/10">
-                        <button type="submit" class="btn-pro btn-primary">
-                            <i data-lucide="save" class="w-4 h-4"></i>
-                            <span>Salvar Configurações</span>
-                        </button>
-                        <button type="button" id="btn-test" class="btn-pro btn-secondary">
-                            <i data-lucide="wifi" class="w-4 h-4"></i>
-                            <span>Testar Conexão Meta</span>
-                        </button>
-                        <button type="button" id="btn-sync" class="btn-pro btn-secondary">
-                            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-                            <span>Sincronizar Meta (3d)</span>
-                        </button>
-                        <button type="button" id="btn-attr-sync" class="btn-pro btn-secondary">
-                            <i data-lucide="git-merge" class="w-4 h-4"></i>
-                            <span>Sincronizar Atribuição (3d)</span>
-                        </button>
-                        <button type="button" id="btn-sync-all" class="btn-pro btn-emerald">
-                            <i data-lucide="zap" class="w-4 h-4"></i>
-                            <span>Sincronizar Tudo (3d)</span>
-                        </button>
-                        <button type="button" id="btn-sync-history" class="btn-pro btn-secondary text-xs">
-                            Carga Histórica Meta
-                        </button>
-                        <button type="button" id="btn-attr-history" class="btn-pro btn-secondary text-xs">
-                            Carga Histórica Atribuição
-                        </button>
-                    </div>
-                </form>
-                <div id="feedback" class="hidden"></div>
-                </div>
-            </div>
 
             </div>
 

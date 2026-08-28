@@ -483,10 +483,12 @@ body {
     background: var(--bg-card-hover);
 }
 
-.integration-modal-container {
-    max-width: 760px;
-    max-height: 88vh;
-    overflow-y: auto;
+.integration-editor {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-highlight);
+    border-radius: 14px;
+    padding: 18px;
+    margin: 14px 0;
 }
 
 .btn-sm {
