@@ -17,6 +17,7 @@ if (!empty($_GET['expired'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['email'] ?? '');
     $password = (string)($_POST['password'] ?? '');
+    $loginEmail = strtolower($username) === 'admin' ? 'admin@professoremersonleite.site' : $username;
 
     try {
         $pdo = db();
@@ -26,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             WHERE email = :email
             LIMIT 1
         ");
-        $stmt->execute([':email' => $username]);
+        $stmt->execute([':email' => $loginEmail]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$user) {
