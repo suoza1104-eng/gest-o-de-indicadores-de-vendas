@@ -123,6 +123,17 @@ document.addEventListener('DOMContentLoaded', function () {
     // 5. AJAX Integration Form & Sync Buttons
     const formIntegration = document.getElementById('integration-form');
     if (formIntegration) {
+        const currencySelect = formIntegration.querySelector('[data-currency-select]');
+        const currencyFields = Array.from(formIntegration.querySelectorAll('[data-currency-field]'));
+        const updateCurrencyFieldsVisibility = () => {
+            const isUsd = currencySelect && currencySelect.value === 'USD';
+            currencyFields.forEach((field) => field.classList.toggle('hidden', !isUsd));
+        };
+        if (currencySelect) {
+            currencySelect.addEventListener('change', updateCurrencyFieldsVisibility);
+            updateCurrencyFieldsVisibility();
+        }
+
         formIntegration.addEventListener('submit', async (e) => {
             e.preventDefault();
             const submitBtn = formIntegration.querySelector('button[type="submit"]');
@@ -565,4 +576,3 @@ window.createChartGradient = function (ctx, colorStart, colorEnd) {
     gradient.addColorStop(1, colorEnd);
     return gradient;
 };
-
