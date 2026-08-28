@@ -2,4 +2,13 @@
 deployment:
   tasks:
     - export DEPLOYPATH=/home1/prof2543/public_html/
-    - /bin/rsync -a --delete --exclude='.git' --exclude='.cpanel.yml' --exclude='config/config.php' --exclude='logs/' --exclude='api/error_log' --exclude='admin/error_log' ./ $DEPLOYPATH
+    - /bin/cp -R admin $DEPLOYPATH
+    - /bin/cp -R api $DEPLOYPATH
+    - /bin/cp -R assets $DEPLOYPATH
+    - /bin/cp -R config $DEPLOYPATH
+    - /bin/cp -R cron $DEPLOYPATH
+    - /bin/cp -R includes $DEPLOYPATH
+    - /bin/cp index.php $DEPLOYPATH
+    - /bin/cp login.php $DEPLOYPATH
+    - /bin/cp logout.php $DEPLOYPATH
+    - /bin/cp README_PRO.md $DEPLOYPATH
