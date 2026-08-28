@@ -58,89 +58,87 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Meta Ads Manager</title>
-    <style>
-        body{
-            margin:0;
-            font-family:Arial,Helvetica,sans-serif;
-            background:#f3f6fb;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            min-height:100vh;
-        }
-        .card{
-            width:100%;
-            max-width:420px;
-            background:#fff;
-            border-radius:16px;
-            padding:32px;
-            box-shadow:0 10px 30px rgba(0,0,0,.08);
-        }
-        h1{
-            margin:0 0 8px;
-            font-size:28px;
-            color:#13233f;
-        }
-        p{
-            margin:0 0 24px;
-            color:#5d6b82;
-        }
-        label{
-            display:block;
-            font-size:14px;
-            font-weight:700;
-            margin:0 0 8px;
-            color:#13233f;
-        }
-        input{
-            width:100%;
-            box-sizing:border-box;
-            padding:14px 16px;
-            border:1px solid #d8e0ee;
-            border-radius:12px;
-            margin-bottom:18px;
-            font-size:15px;
-        }
-        button{
-            width:100%;
-            border:none;
-            border-radius:12px;
-            padding:14px 16px;
-            background:#13233f;
-            color:#fff;
-            font-size:15px;
-            font-weight:700;
-            cursor:pointer;
-        }
-        .error{
-            background:#fdecec;
-            color:#b42318;
-            border-radius:12px;
-            padding:12px 14px;
-            margin-bottom:18px;
-            font-size:14px;
-        }
-    </style>
+    <title>Login - Meta Ads Manager Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="assets/css/app-pro.css">
 </head>
-<body>
-    <div class="card">
-        <h1>Meta Ads Manager</h1>
-        <p>Faça login para acessar o painel.</p>
+<body class="bg-[#090d16] text-slate-100 min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+    <!-- Glow Backdrop Effect -->
+    <div class="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-indigo-600/20 rounded-full blur-[140px] pointer-events-none"></div>
+    <div class="absolute bottom-10 right-10 w-[350px] h-[350px] bg-violet-600/15 rounded-full blur-[120px] pointer-events-none"></div>
 
-        <?php if ($error !== ''): ?>
-            <div class="error"><?php echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?></div>
-        <?php endif; ?>
+    <div class="w-full max-width-[440px] max-w-md relative z-10">
+        <!-- Logo Header -->
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-600/10 border border-indigo-500/30 text-indigo-400 mb-4 shadow-[0_0_25px_rgba(99,102,241,0.3)]">
+                <i data-lucide="bar-chart-3" class="w-8 h-8"></i>
+            </div>
+            <h1 class="text-3xl font-extrabold tracking-tight text-white">Meta Ads Pro</h1>
+            <p class="text-slate-400 text-sm mt-1">Plataforma de Inteligência e Atribuição de Trafego</p>
+        </div>
 
-        <form method="post" autocomplete="off">
-            <label for="email">Usuário</label>
-            <input type="text" name="email" id="email" required>
+        <!-- Glass Card -->
+        <div class="bg-[#111726]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.6)]">
+            <h2 class="text-xl font-bold text-white mb-2">Acesse sua conta</h2>
+            <p class="text-slate-400 text-xs mb-6">Entre com suas credenciais de administrador</p>
 
-            <label for="password">Senha</label>
-            <input type="password" name="password" id="password" required>
+            <?php if (!empty($error)): ?>
+                <div class="mb-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-sm flex items-center gap-3">
+                    <i data-lucide="alert-circle" class="w-5 h-5 flex-shrink-0"></i>
+                    <span><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></span>
+                </div>
+            <?php endif; ?>
 
-            <button type="submit">Entrar</button>
-        </form>
+            <form method="post" action="login.php" class="space-y-5">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">E-mail ou Usuário</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                            <i data-lucide="mail" class="w-5 h-5"></i>
+                        </div>
+                        <input type="text" name="email" required placeholder="admin@empresa.com" 
+                            class="w-full pl-11 pr-4 py-3 bg-slate-900/80 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm transition-all">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Senha</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                            <i data-lucide="lock" class="w-5 h-5"></i>
+                        </div>
+                        <input type="password" id="password-field" name="password" required placeholder="••••••••" 
+                            class="w-full pl-11 pr-11 py-3 bg-slate-900/80 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm transition-all">
+                        <button type="button" id="toggle-password" class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300">
+                            <i data-lucide="eye" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <button type="submit" 
+                    class="w-full py-3.5 px-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold rounded-xl shadow-[0_4px_20px_rgba(99,102,241,0.4)] transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2">
+                    <span>Entrar no Painel</span>
+                    <i data-lucide="arrow-right" class="w-5 h-5"></i>
+                </button>
+            </form>
+        </div>
+
+        <div class="text-center mt-6 text-xs text-slate-500">
+            &copy; <?= date('Y') ?> Meta Ads Manager Pro. Todos os direitos reservados.
+        </div>
     </div>
+
+    <script>
+        lucide.createIcons();
+        const toggleBtn = document.getElementById('toggle-password');
+        const passField = document.getElementById('password-field');
+        if (toggleBtn && passField) {
+            toggleBtn.addEventListener('click', () => {
+                const type = passField.type === 'password' ? 'text' : 'password';
+                passField.type = type;
+            });
+        }
+    </script>
 </body>
 </html>

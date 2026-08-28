@@ -1317,319 +1317,645 @@ $attrChart = array(
 );
 ?>
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" class="dark">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Meta Ads Manager</title>
-    <link rel="stylesheet" href="../assets/css/style.css">
+    <title>Meta Ads Manager Pro - Painel de Atribuição</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="assets/css/app-pro.css">
+    <style>
+        .child-row.hidden { display: none !important; }
+        .sync-extra.hidden { display: none !important; }
+        .hier-table .indent-1 { padding-left: 28px !important; }
+        .hier-table .indent-2 { padding-left: 48px !important; }
+        .toggle-row {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #94a3b8;
+            border-radius: 6px;
+            width: 24px;
+            height: 24px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            cursor: pointer;
+            margin-right: 6px;
+            transition: all 0.2s;
+        }
+        .toggle-row:hover { background: rgba(99,102,241,0.3); color: #fff; }
+        .summary-row td { background: rgba(99,102,241,0.08) !important; font-weight: 700; color: #6366f1; border-top: 2px solid rgba(99,102,241,0.3); border-bottom: 2px solid rgba(99,102,241,0.3); }
+        .trend.positive { color: #10b981; font-weight: 600; }
+        .trend.negative { color: #f43f5e; font-weight: 600; }
+        .trend.neutral { color: #94a3b8; }
+        .multi-select { position: relative; }
+        .multi-select-menu {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            margin-top: 6px;
+            background: #111726;
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 12px;
+            max-height: 250px;
+            overflow-y: auto;
+            z-index: 50;
+            padding: 8px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+        }
+        .multi-select-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #cbd5e1;
+            cursor: pointer;
+        }
+        .multi-select-option:hover { background: rgba(255,255,255,0.06); color: #fff; }
+    </style>
 </head>
-<body>
-<div class="container">
-    <header class="page-header">
-        <div>
-            <h1>Meta Ads Manager</h1>
-            <p>Coleta Meta + atribuição real por UTM e Hotmart.</p>
-        </div>
-    </header>
-
-    <section class="panel">
-        <h2>Configurar integração</h2>
-        <form id="integration-form" class="grid-form">
-            <input type="hidden" name="id" value="<?= h((string)($integration['id'] ?? '')) ?>">
-            <div><label>Nome</label><input type="text" name="name" value="<?= h($integration['name'] ?? 'Meta Principal') ?>" required></div>
-            <div><label>Ad Account ID</label><input type="text" name="ad_account_id" value="<?= h($integration['ad_account_id'] ?? '') ?>" placeholder="act_123456789" required></div>
-            <div><label>App ID</label><input type="text" name="app_id" value="<?= h($integration['app_id'] ?? '') ?>"></div>
-            <div><label>App Secret</label><input type="text" name="app_secret" value="<?= h($integration['app_secret'] ?? '') ?>"></div>
-            <div class="full"><label>Access Token</label><textarea name="access_token" rows="4" placeholder="Cole aqui o token da Meta"><?= h($integration['access_token'] ?? '') ?></textarea></div>
-            <div><label>Intervalo de sincronização (min)</label><input type="number" name="sync_interval_minutes" min="5" value="<?= h((string)($integration['sync_interval_minutes'] ?? 30)) ?>"></div>
-            <div><label>Status</label><select name="status"><option value="active" <?= (($integration['status'] ?? 'active') === 'active') ? 'selected' : '' ?>>Ativa</option><option value="inactive" <?= (($integration['status'] ?? '') === 'inactive') ? 'selected' : '' ?>>Inativa</option></select></div>
-            <div><label>Timezone</label><input type="text" name="timezone" value="<?= h($integration['timezone'] ?? 'America/Sao_Paulo') ?>"></div>
-            <div><label>Histórico Meta (dias)</label><input type="number" id="meta-history-days" min="1" max="180" value="30"><small class="muted">máx. 180</small></div>
-            <div><label>Histórico atribuição (dias)</label><input type="number" id="attr-history-days" min="1" max="365" value="90"><small class="muted">máx. 365</small></div>
-            <div><label>Sync diária</label><input type="text" value="Últimos 3 dias" disabled></div>
-            <div class="actions full">
-                <button type="submit">Salvar integração</button>
-                <button type="button" id="btn-test">Testar conexão</button>
-                <button type="button" id="btn-sync">Sincronizar Meta (3d)</button>
-                <button type="button" id="btn-attr-sync">Sincronizar atribuição (3d)</button>
-                <button type="button" id="btn-sync-all">Sincronizar tudo (3d)</button>
-                <button type="button" id="btn-sync-history">Carga histórica Meta</button>
-                <button type="button" id="btn-attr-history">Carga histórica atribuição</button>
+<body class="bg-[#090d16] text-slate-100 min-h-screen">
+<div class="app-shell" data-app-shell>
+    <!-- Sidebar -->
+    <aside class="app-sidebar" data-sidebar>
+        <div class="p-5 flex items-center justify-between border-b border-white/10">
+            <div class="flex items-center gap-3 brand-title">
+                <div class="w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.25)]">
+                    <i data-lucide="bar-chart-3" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h2 class="font-extrabold text-white text-base leading-tight">Meta Ads</h2>
+                    <span class="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">PRO v2.0</span>
+                </div>
             </div>
-        </form>
-        <div id="feedback" class="feedback"></div>
-    </section>
-
-    <section class="cards cards-6">
-        <article class="card"><span>Gasto Meta hoje</span><strong>R$ <?= number_format((float)($metaCards['spend'] ?? 0), 2, ',', '.') ?></strong></article>
-        <article class="card"><span>Impressões hoje</span><strong><?= number_format((float)($metaCards['impressions'] ?? 0), 0, ',', '.') ?></strong></article>
-        <article class="card"><span>Cliques hoje</span><strong><?= number_format((float)($metaCards['clicks'] ?? 0), 0, ',', '.') ?></strong></article>
-        <article class="card"><span>Leads Meta hoje</span><strong><?= number_format((float)($metaCards['leads'] ?? 0), 0, ',', '.') ?></strong></article>
-        <article class="card"><span>CPM médio hoje</span><strong>R$ <?= number_format((float)($metaCards['cpm'] ?? 0), 2, ',', '.') ?></strong></article>
-        <article class="card"><span>Frequência média hoje</span><strong><?= number_format((float)($metaCards['frequency'] ?? 0), 2, ',', '.') ?></strong></article>
-    </section>
-
-    <section class="panel">
-        <div class="section-head"><h2>Meta - últimos 30 dias</h2></div>
-        <div class="chart-grid">
-            <div class="chart-card"><canvas id="metaSpendChart"></canvas></div>
-            <div class="chart-card"><canvas id="metaCpmChart"></canvas></div>
+            <button type="button" class="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white" data-sidebar-toggle>
+                <i data-lucide="menu" class="w-4 h-4"></i>
+            </button>
         </div>
-    </section>
 
-    <section class="panel filter-panel">
-        <div class="section-head"><h2>Dashboard real por UTM</h2></div>
-        <form method="get" class="grid-form compact-form compact-form-wide">
-            <div><label>Modelo</label><select name="model"><option value="last_touch" <?= $attributionModel === 'last_touch' ? 'selected' : '' ?>>Last touch</option><option value="first_touch" <?= $attributionModel === 'first_touch' ? 'selected' : '' ?>>First touch</option></select></div>
-            <div><label>Campanhas</label><div class="multi-select" data-multi-select><button type="button" class="multi-select-trigger" data-multi-select-trigger><?= $campaignFilters ? (count($campaignFilters) . ' campanha(s) selecionada(s)') : 'Todas' ?></button><div class="multi-select-menu" data-multi-select-menu><label class="multi-select-option"><input type="checkbox" data-select-all-campaigns <?= !$campaignFilters ? 'checked' : '' ?>> <span>Todas</span></label><?php foreach ($campaignOptions as $opt): ?><label class="multi-select-option"><input type="checkbox" name="campaign[]" value="<?= h($opt) ?>" <?= in_array($opt, $campaignFilters, true) ? 'checked' : '' ?>> <span><?= h($opt) ?></span></label><?php endforeach; ?></div></div></div>
-            <div><label>Conjunto</label><select name="adset"><option value="">Todos</option><?php foreach ($adsetOptions as $opt): ?><option value="<?= h($opt) ?>" <?= $adsetFilter === $opt ? 'selected' : '' ?>><?= h($opt) ?></option><?php endforeach; ?></select></div>
-            <div><label>Produto</label><select name="product"><option value="">Todos</option><?php foreach ($productOptions as $opt): ?><option value="<?= h($opt) ?>" <?= $productFilter === $opt ? 'selected' : '' ?>><?= h($opt) ?></option><?php endforeach; ?></select></div>
-            <div><label>Data inicial</label><input type="date" name="range_start" value="<?= h($rangeStart) ?>"></div>
-            <div><label>Data final</label><input type="date" name="range_end" value="<?= h($rangeEnd) ?>"></div>
-            <div><label>Eixo X</label><select name="granularity"><option value="day" <?= $granularity === 'day' ? 'selected' : '' ?>>Dia</option><option value="week" <?= $granularity === 'week' ? 'selected' : '' ?>>Semana</option><option value="month" <?= $granularity === 'month' ? 'selected' : '' ?>>Mês</option><option value="year" <?= $granularity === 'year' ? 'selected' : '' ?>>Ano</option></select></div>
-            <div><label>Período A</label><input type="number" name="period_a" min="1" value="<?= h((string)$periodA) ?>"></div>
-            <div><label>Período B</label><input type="number" name="period_b" min="1" value="<?= h((string)$periodB) ?>"></div>
-            <div><label>Período C</label><input type="number" name="period_c" min="1" value="<?= h((string)$periodC) ?>"></div>
-            <div class="actions full"><button type="submit">Aplicar filtros</button></div>
-        </form>
-    </section>
+        <nav class="p-3 space-y-1.5 flex-1">
+            <button type="button" class="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-medium text-sm text-slate-300 hover:bg-white/5 transition-all text-left group active" data-section-target="dashboard">
+                <div class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-400 group-hover:bg-indigo-600/20 group-hover:text-indigo-400 transition-colors">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                </div>
+                <span class="sidebar-label">Indicadores Reais</span>
+            </button>
 
-    <section class="cards cards-5">
-        <article class="card"><span>Gasto período</span><strong>R$ <?= number_format($attrCards['spend'], 2, ',', '.') ?></strong></article>
-        <article class="card"><span>Leads período</span><strong><?= number_format($attrCards['leads'], 0, ',', '.') ?></strong></article>
-        <article class="card"><span>Vendas atribuídas</span><strong><?= number_format($attrCards['sales'], 0, ',', '.') ?></strong></article>
-        <article class="card"><span>Receita atribuída</span><strong>R$ <?= number_format($attrCards['revenue'], 2, ',', '.') ?></strong></article>
-        <article class="card"><span>ROAS</span><strong><?= number_format($attrCards['roas'], 2, ',', '.') ?></strong></article>
-        <article class="card"><span>CAC</span><strong>R$ <?= number_format($attrCards['cac'], 2, ',', '.') ?></strong></article>
-        <article class="card"><span>CPL</span><strong>R$ <?= number_format($attrCards['cpl'], 2, ',', '.') ?></strong></article>
-        <article class="card"><span>CPM</span><strong>R$ <?= number_format($attrCards['cpm'], 2, ',', '.') ?></strong></article>
-        <article class="card"><span>CPC médio</span><strong>R$ <?= number_format($attrCards['cpc'], 2, ',', '.') ?></strong></article>
-        <article class="card"><span>Frequência</span><strong><?= number_format($attrCards['frequency'], 2, ',', '.') ?></strong></article>
-    </section>
-    <section class="panel">
-        <div class="section-head"><h2>Indicadores gerais de vendas</h2><span class="muted">Inclui vendas atribuídas e não atribuídas.</span></div>
-        <div class="cards cards-5 no-bottom">
-            <article class="card"><span>Todas as vendas</span><strong><?= number_format($allSalesCards['sales'], 0, ',', '.') ?></strong></article>
-            <article class="card"><span>Receita total</span><strong>R$ <?= number_format($allSalesCards['revenue'], 2, ',', '.') ?></strong></article>
-            <article class="card"><span>ROAS total</span><strong><?= number_format($allSalesCards['roas'], 2, ',', '.') ?></strong></article>
-            <article class="card"><span>CAC total</span><strong>R$ <?= number_format($allSalesCards['cac'], 2, ',', '.') ?></strong></article>
-            <article class="card"><span>CPM</span><strong>R$ <?= number_format($allSalesCards['cpm'], 2, ',', '.') ?></strong></article>
-            <article class="card"><span>CPC médio</span><strong>R$ <?= number_format($allSalesCards['cpc'], 2, ',', '.') ?></strong></article>
-            <article class="card"><span>Frequência</span><strong><?= number_format($allSalesCards['frequency'], 2, ',', '.') ?></strong></article>
-        </div>
-    </section>
+            <button type="button" class="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-medium text-sm text-slate-300 hover:bg-white/5 transition-all text-left group" data-section-target="campaigns">
+                <div class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-400 group-hover:bg-indigo-600/20 group-hover:text-indigo-400 transition-colors">
+                    <i data-lucide="target" class="w-4 h-4"></i>
+                </div>
+                <span class="sidebar-label">Campanhas & Vendas</span>
+            </button>
 
-    <section class="panel">
-        <div class="chart-grid chart-grid-half">
-            <div class="chart-card"><canvas id="salesAttributionPieChart"></canvas></div>
-            <div class="chart-card"><canvas id="salesPaymentBarChart"></canvas></div>
-        </div>
-        <div class="chart-grid chart-grid-half mt-16">
-            <div class="chart-card"><canvas id="salesInstallmentsBarChart"></canvas></div>
-            <div class="chart-card"><canvas id="nonCompletedEventsPieChart"></canvas></div>
-        </div>
-        <div class="chart-grid mt-16">
-            <div class="chart-card chart-card-full"><canvas id="leadToSaleDelayBarChart"></canvas></div>
-        </div>
-    </section>
+            <button type="button" class="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-medium text-sm text-slate-300 hover:bg-white/5 transition-all text-left group" data-section-target="settings">
+                <div class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-400 group-hover:bg-indigo-600/20 group-hover:text-indigo-400 transition-colors">
+                    <i data-lucide="settings" class="w-4 h-4"></i>
+                </div>
+                <span class="sidebar-label">Configurações API</span>
+            </button>
+        </nav>
 
-    <section class="panel">
-        <div class="section-head"><h2>Tendências de eficiência</h2></div>
-        <div class="table-wrap">
-            <table>
-                <thead><tr><th>Comparativo</th><th>CAC</th><th>CPL</th><th>ROAS</th><th>CPM</th><th>Frequência</th><th>CPC</th></tr></thead>
-                <tbody>
-                <?php if (!$attrTrendRows): ?>
-                    <tr><td colspan="7">Sem dados atribuídos ainda.</td></tr>
-                <?php else: foreach ($attrTrendRows as $trend): ?>
-                    <tr>
-                        <td><?= h($trend['label']) ?></td>
-                        <?php foreach (array('cac','cpl','roas','cpm','frequency','cpc') as $metric): $m = $trend['metrics'][$metric]; ?>
-                            <td><span class="trend <?= h($m['direction']) ?>"><?= $m['change'] === null ? '—' : (($m['change'] > 0 ? '+' : '') . number_format($m['change'], 1, ',', '.') . '%') ?></span></td>
-                        <?php endforeach; ?>
-                    </tr>
-                <?php endforeach; endif; ?>
-                </tbody>
-            </table>
+        <div class="p-4 border-t border-white/10 sidebar-footer-info">
+            <div class="flex items-center gap-3 p-3 rounded-xl bg-slate-900/60 border border-white/5">
+                <div class="pulse-dot"></div>
+                <div class="text-xs">
+                    <p class="font-medium text-slate-200"><?= $integration ? h((string)($integration['name'] ?? 'Meta Principal')) : 'Sem integração' ?></p>
+                    <p class="text-slate-500 text-[11px]"><?= $integration ? 'Status: ' . h((string)($integration['status'] ?? 'ativa')) : 'Desconectado' ?></p>
+                </div>
+            </div>
         </div>
-    </section>
+    </aside>
 
-    <section class="panel">
-        <div class="section-head"><h2>Real - período filtrado</h2></div>
-        <div class="chart-grid">
-            <div class="chart-card"><canvas id="attrRevenueChart"></canvas></div>
-            <div class="chart-card"><canvas id="attrEfficiencyChart"></canvas></div>
-        </div>
-    </section>
+    <!-- Main Content Area -->
+    <main class="app-main">
+        <!-- Top App Header -->
+        <header class="app-header">
+            <div class="flex items-center gap-4">
+                <button type="button" class="md:hidden w-9 h-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-slate-300" data-sidebar-toggle>
+                    <i data-lucide="menu" class="w-5 h-5"></i>
+                </button>
+                <div>
+                    <h1 class="text-lg font-bold text-white leading-tight">Dashboard Analítico & Atribuição</h1>
+                    <p class="text-slate-400 text-xs hidden sm:block">Inteligência de Tráfego Pago Meta + Hotmart Live</p>
+                </div>
+            </div>
 
-    <section class="panel">
-        <div class="section-head"><h2>Top campanhas / conjuntos / anúncios</h2></div>
-        <div class="table-wrap">
-            <table class="hier-table">
-                <thead>
-                    <tr>
-                        <th><?= sort_link($queryParams, 'revenue', 'Estrutura', $sort, $dir) ?></th>
-                        <th><?= sort_link($queryParams, 'spend', 'Gasto', $sort, $dir) ?></th>
-                        <th><?= sort_link($queryParams, 'leads', 'Leads', $sort, $dir) ?></th>
-                        <th><?= sort_link($queryParams, 'sales', 'Vendas', $sort, $dir) ?></th>
-                        <th><?= sort_link($queryParams, 'revenue', 'Receita', $sort, $dir) ?></th>
-                        <th><?= sort_link($queryParams, 'cpl', 'CPL', $sort, $dir) ?></th>
-                        <th><?= sort_link($queryParams, 'cac', 'CAC', $sort, $dir) ?></th>
-                        <th><?= sort_link($queryParams, 'roas', 'ROAS', $sort, $dir) ?></th>
-                    </tr>
-                </thead>
-                <tbody>
-                <?php if (!$topNested): ?>
-                    <tr><td colspan="8">Sem dados atribuídos ainda.</td></tr>
-                <?php else: ?>
-                    <tr class="summary-row">
-                        <td><strong>Total das campanhas exibidas</strong></td>
-                        <td><strong>R$ <?= number_format($topSummary['spend'], 2, ',', '.') ?></strong></td>
-                        <td><strong><?= number_format($topSummary['leads'], 0, ',', '.') ?></strong></td>
-                        <td><strong><?= number_format($topSummary['sales'], 0, ',', '.') ?></strong></td>
-                        <td><strong>R$ <?= number_format($topSummary['revenue'], 2, ',', '.') ?></strong></td>
-                        <td><strong>R$ <?= number_format($topSummary['cpl'], 2, ',', '.') ?></strong></td>
-                        <td><strong>R$ <?= number_format($topSummary['cac'], 2, ',', '.') ?></strong></td>
-                        <td><strong><?= number_format($topSummary['roas'], 2, ',', '.') ?></strong></td>
-                    </tr>
-                <?php $campaignIndex = 0; foreach ($topNested as $campaign => $cData): $campaignIndex++; $campaignId = 'c'.$campaignIndex; ?>
-                    <tr class="level-campaign">
-                        <td><button type="button" class="toggle-row" data-target="<?= h($campaignId) ?>">▾</button> <strong><?= h($campaign) ?></strong></td>
-                        <td>R$ <?= number_format($cData['metrics']['spend'], 2, ',', '.') ?></td>
-                        <td><?= number_format($cData['metrics']['leads'], 0, ',', '.') ?></td>
-                        <td><?= number_format($cData['metrics']['sales'], 0, ',', '.') ?></td>
-                        <td>R$ <?= number_format($cData['metrics']['revenue'], 2, ',', '.') ?></td>
-                        <td>R$ <?= number_format($cData['metrics']['cpl'], 2, ',', '.') ?></td>
-                        <td>R$ <?= number_format($cData['metrics']['cac'], 2, ',', '.') ?></td>
-                        <td><?= number_format($cData['metrics']['roas'], 2, ',', '.') ?></td>
-                    </tr>
-                    <?php $adsetIndex = 0; foreach ($cData['children'] as $adset => $aData): $adsetIndex++; $adsetId = $campaignId.'a'.$adsetIndex; ?>
-                        <tr class="level-adset child-row <?= h($campaignId) ?>">
-                            <td class="indent-1"><button type="button" class="toggle-row" data-target="<?= h($adsetId) ?>">▾</button> <?= h($adset) ?></td>
-                            <td>R$ <?= number_format($aData['metrics']['spend'], 2, ',', '.') ?></td>
-                            <td><?= number_format($aData['metrics']['leads'], 0, ',', '.') ?></td>
-                            <td><?= number_format($aData['metrics']['sales'], 0, ',', '.') ?></td>
-                            <td>R$ <?= number_format($aData['metrics']['revenue'], 2, ',', '.') ?></td>
-                            <td>R$ <?= number_format($aData['metrics']['cpl'], 2, ',', '.') ?></td>
-                            <td>R$ <?= number_format($aData['metrics']['cac'], 2, ',', '.') ?></td>
-                            <td><?= number_format($aData['metrics']['roas'], 2, ',', '.') ?></td>
-                        </tr>
-                        <?php foreach ($aData['children'] as $ad => $dData): ?>
-                            <tr class="level-ad child-row <?= h($campaignId) ?> <?= h($adsetId) ?>">
-                                <td class="indent-2"><?= h($ad) ?></td>
-                                <td>R$ <?= number_format($dData['metrics']['spend'], 2, ',', '.') ?></td>
-                                <td><?= number_format($dData['metrics']['leads'], 0, ',', '.') ?></td>
-                                <td><?= number_format($dData['metrics']['sales'], 0, ',', '.') ?></td>
-                                <td>R$ <?= number_format($dData['metrics']['revenue'], 2, ',', '.') ?></td>
-                                <td>R$ <?= number_format($dData['metrics']['cpl'], 2, ',', '.') ?></td>
-                                <td>R$ <?= number_format($dData['metrics']['cac'], 2, ',', '.') ?></td>
-                                <td><?= number_format($dData['metrics']['roas'], 2, ',', '.') ?></td>
+            <div class="flex items-center gap-3">
+                <a href="admin/upload_hotmart.php" class="btn-pro btn-emerald btn-sm">
+                    <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Importar CSV Hotmart</span>
+                </a>
+
+                <a href="logout.php" class="btn-pro btn-secondary btn-sm" title="Sair da Conta">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </header>
+
+        <!-- Main Body Workspace -->
+        <div class="p-6 md:p-8 max-w-[1700px] mx-auto w-full space-y-8">
+            
+            <!-- SECTION 1: CONFIGURAÇÕES DE INTEGRAÇÃO (data-app-group="settings") -->
+            <section class="glass-card space-y-6">
+                <div class="flex items-center justify-between pb-4 border-b border-white/10">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-indigo-600/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                            <i data-lucide="sliders" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-xl font-bold text-white">Configurar Integração Meta Graph API</h2>
+                            <p class="text-xs text-slate-400">Credenciais de acesso, conta de anúncios e sincronizações em segundo plano</p>
+                        </div>
+                    </div>
+                </div>
+
+                <form id="integration-form" class="space-y-6">
+                    <input type="hidden" name="id" value="<?= h((string)($integration['id'] ?? '')) ?>">
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="form-group">
+                            <label class="form-label">Nome da Integração</label>
+                            <input type="text" name="name" value="<?= h($integration['name'] ?? 'Meta Principal') ?>" required class="pro-input">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Ad Account ID</label>
+                            <input type="text" name="ad_account_id" value="<?= h($integration['ad_account_id'] ?? '') ?>" placeholder="act_123456789" required class="pro-input font-mono">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">App ID</label>
+                            <input type="text" name="app_id" value="<?= h($integration['app_id'] ?? '') ?>" class="pro-input font-mono">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">App Secret</label>
+                            <input type="text" name="app_secret" value="<?= h($integration['app_secret'] ?? '') ?>" class="pro-input font-mono">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">System User Access Token</label>
+                        <textarea name="access_token" rows="3" placeholder="Cole aqui o token de longa duração da Meta" class="pro-textarea font-mono text-xs"><?= h($integration['access_token'] ?? '') ?></textarea>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                        <div class="form-group">
+                            <label class="form-label">Intervalo Sync (min)</label>
+                            <input type="number" name="sync_interval_minutes" min="5" value="<?= h((string)($integration['sync_interval_minutes'] ?? 30)) ?>" class="pro-input">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Status</label>
+                            <select name="status" class="pro-select">
+                                <option value="active" <?= (($integration['status'] ?? 'active') === 'active') ? 'selected' : '' ?>>Ativa</option>
+                                <option value="inactive" <?= (($integration['status'] ?? '') === 'inactive') ? 'selected' : '' ?>>Inativa</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Fuso Horário</label>
+                            <input type="text" name="timezone" value="<?= h($integration['timezone'] ?? 'America/Sao_Paulo') ?>" class="pro-input">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Histórico Meta (dias)</label>
+                            <input type="number" id="meta-history-days" min="1" max="180" value="30" class="pro-input">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Histórico Atribuição (dias)</label>
+                            <input type="number" id="attr-history-days" min="1" max="365" value="90" class="pro-input">
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-3 pt-4 border-t border-white/10">
+                        <button type="submit" class="btn-pro btn-primary">
+                            <i data-lucide="save" class="w-4 h-4"></i>
+                            <span>Salvar Configurações</span>
+                        </button>
+                        <button type="button" id="btn-test" class="btn-pro btn-secondary">
+                            <i data-lucide="wifi" class="w-4 h-4"></i>
+                            <span>Testar Conexão Meta</span>
+                        </button>
+                        <button type="button" id="btn-sync" class="btn-pro btn-secondary">
+                            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                            <span>Sincronizar Meta (3d)</span>
+                        </button>
+                        <button type="button" id="btn-attr-sync" class="btn-pro btn-secondary">
+                            <i data-lucide="git-merge" class="w-4 h-4"></i>
+                            <span>Sincronizar Atribuição (3d)</span>
+                        </button>
+                        <button type="button" id="btn-sync-all" class="btn-pro btn-emerald">
+                            <i data-lucide="zap" class="w-4 h-4"></i>
+                            <span>Sincronizar Tudo (3d)</span>
+                        </button>
+                        <button type="button" id="btn-sync-history" class="btn-pro btn-secondary text-xs">
+                            Carga Histórica Meta
+                        </button>
+                        <button type="button" id="btn-attr-history" class="btn-pro btn-secondary text-xs">
+                            Carga Histórica Atribuição
+                        </button>
+                    </div>
+                </form>
+                <div id="feedback" class="hidden"></div>
+            </section>
+
+            <!-- SECTION 2: META HOJE - CARDS DE MÉTRICAS -->
+            <div class="space-y-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i data-lucide="clock" class="w-5 h-5 text-indigo-400"></i>
+                        <span>Métricas em Tempo Real na Meta (Hoje)</span>
+                    </h2>
+                    <span class="badge badge-indigo">Atualização Direta</span>
+                </div>
+
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <span class="kpi-label">Gasto Meta Hoje</span>
+                            <div class="kpi-icon-box amber"><i data-lucide="dollar-sign" class="w-5 h-5"></i></div>
+                        </div>
+                        <div class="kpi-value font-mono">R$ <?= number_format((float)($metaCards['spend'] ?? 0), 2, ',', '.') ?></div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <span class="kpi-label">Impressões Hoje</span>
+                            <div class="kpi-icon-box cyan"><i data-lucide="eye" class="w-5 h-5"></i></div>
+                        </div>
+                        <div class="kpi-value font-mono"><?= number_format((float)($metaCards['impressions'] ?? 0), 0, ',', '.') ?></div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <span class="kpi-label">Cliques Hoje</span>
+                            <div class="kpi-icon-box emerald"><i data-lucide="mouse-pointer" class="w-5 h-5"></i></div>
+                        </div>
+                        <div class="kpi-value font-mono"><?= number_format((float)($metaCards['clicks'] ?? 0), 0, ',', '.') ?></div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <span class="kpi-label">Leads Meta Hoje</span>
+                            <div class="kpi-icon-box indigo"><i data-lucide="users" class="w-5 h-5"></i></div>
+                        </div>
+                        <div class="kpi-value font-mono"><?= number_format((float)($metaCards['leads'] ?? 0), 0, ',', '.') ?></div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <span class="kpi-label">CPM Médio Hoje</span>
+                            <div class="kpi-icon-box rose"><i data-lucide="bar-chart-2" class="w-5 h-5"></i></div>
+                        </div>
+                        <div class="kpi-value font-mono">R$ <?= number_format((float)($metaCards['cpm'] ?? 0), 2, ',', '.') ?></div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <span class="kpi-label">Frequência Hoje</span>
+                            <div class="kpi-icon-box amber"><i data-lucide="repeat" class="w-5 h-5"></i></div>
+                        </div>
+                        <div class="kpi-value font-mono"><?= number_format((float)($metaCards['frequency'] ?? 0), 2, ',', '.') ?></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 3: GRÁFICOS META 30 DIAS -->
+            <section class="glass-card space-y-4">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i data-lucide="trending-up" class="w-5 h-5 text-indigo-400"></i>
+                    <span>Evolução Meta (Últimos 30 dias)</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-slate-900/60 p-4 rounded-xl border border-white/5">
+                        <h4 class="text-xs font-semibold text-slate-400 mb-3">Investimento Diário (R$)</h4>
+                        <div class="h-64"><canvas id="metaSpendChart"></canvas></div>
+                    </div>
+                    <div class="bg-slate-900/60 p-4 rounded-xl border border-white/5">
+                        <h4 class="text-xs font-semibold text-slate-400 mb-3">Custo por Mil Impressões (CPM)</h4>
+                        <div class="h-64"><canvas id="metaCpmChart"></canvas></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 4: FILTROS DO DASHBOARD REAL -->
+            <section class="glass-card space-y-4">
+                <div class="flex items-center justify-between pb-3 border-b border-white/10">
+                    <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i data-lucide="filter" class="w-5 h-5 text-emerald-400"></i>
+                        <span>Filtros do Dashboard de Atribuição Real</span>
+                    </h2>
+                </div>
+
+                <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    <div class="form-group">
+                        <label class="form-label">Modelo de Atribuição</label>
+                        <select name="model" class="pro-select">
+                            <option value="last_touch" <?= $attributionModel === 'last_touch' ? 'selected' : '' ?>>Last Touch (Último clique)</option>
+                            <option value="first_touch" <?= $attributionModel === 'first_touch' ? 'selected' : '' ?>>First Touch (Primeiro clique)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Campanha</label>
+                        <div class="multi-select" data-multi-select>
+                            <button type="button" class="pro-input text-left truncate flex items-center justify-between" data-multi-select-trigger>
+                                <span><?= $campaignFilters ? (count($campaignFilters) . ' selecionada(s)') : 'Todas as campanhas' ?></span>
+                                <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400"></i>
+                            </button>
+                            <div class="multi-select-menu hidden" data-multi-select-menu>
+                                <label class="multi-select-option">
+                                    <input type="checkbox" data-select-all-campaigns <?= !$campaignFilters ? 'checked' : '' ?> class="rounded bg-slate-900 border-white/20 text-indigo-600">
+                                    <span>Todas</span>
+                                </label>
+                                <?php foreach ($campaignOptions as $opt): ?>
+                                    <label class="multi-select-option">
+                                        <input type="checkbox" name="campaign[]" value="<?= h($opt) ?>" <?= in_array($opt, $campaignFilters, true) ? 'checked' : '' ?> class="rounded bg-slate-900 border-white/20 text-indigo-600">
+                                        <span class="truncate"><?= h($opt) ?></span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Conjunto</label>
+                        <select name="adset" class="pro-select">
+                            <option value="">Todos</option>
+                            <?php foreach ($adsetOptions as $opt): ?>
+                                <option value="<?= h($opt) ?>" <?= $adsetFilter === $opt ? 'selected' : '' ?>><?= h($opt) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Produto Hotmart</label>
+                        <select name="product" class="pro-select">
+                            <option value="">Todos os produtos</option>
+                            <?php foreach ($productOptions as $opt): ?>
+                                <option value="<?= h($opt) ?>" <?= $productFilter === $opt ? 'selected' : '' ?>><?= h($opt) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Data Inicial</label>
+                        <input type="date" name="range_start" value="<?= h($rangeStart) ?>" class="pro-input">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Data Final</label>
+                        <input type="date" name="range_end" value="<?= h($rangeEnd) ?>" class="pro-input">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Eixo Temporal</label>
+                        <select name="granularity" class="pro-select">
+                            <option value="day" <?= $granularity === 'day' ? 'selected' : '' ?>>Por Dia</option>
+                            <option value="week" <?= $granularity === 'week' ? 'selected' : '' ?>>Por Semana</option>
+                            <option value="month" <?= $granularity === 'month' ? 'selected' : '' ?>>Por Mês</option>
+                            <option value="year" <?= $granularity === 'year' ? 'selected' : '' ?>>Por Ano</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Período Comp. A</label>
+                        <input type="number" name="period_a" min="1" value="<?= h((string)$periodA) ?>" class="pro-input">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Período Comp. B</label>
+                        <input type="number" name="period_b" min="1" value="<?= h((string)$periodB) ?>" class="pro-input">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Período Comp. C</label>
+                        <input type="number" name="period_c" min="1" value="<?= h((string)$periodC) ?>" class="pro-input">
+                    </div>
+
+                    <div class="col-span-full flex items-center justify-end">
+                        <button type="submit" class="btn-pro btn-primary">
+                            <i data-lucide="filter" class="w-4 h-4"></i>
+                            <span>Aplicar Filtros Selecionados</span>
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- SECTION 5: CARDS DE DESEMPENHO REAL (PERÍODO FILTRADO) -->
+            <div class="space-y-4">
+                <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i data-lucide="pie-chart" class="w-5 h-5 text-indigo-400"></i>
+                    <span>Resultados Reais Atribuídos no Período</span>
+                </h2>
+
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-header"><span class="kpi-label">Gasto no Período</span><div class="kpi-icon-box amber"><i data-lucide="dollar-sign" class="w-5 h-5"></i></div></div>
+                        <div class="kpi-value font-mono">R$ <?= number_format($attrCards['spend'], 2, ',', '.') ?></div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header"><span class="kpi-label">Leads no Período</span><div class="kpi-icon-box cyan"><i data-lucide="user-plus" class="w-5 h-5"></i></div></div>
+                        <div class="kpi-value font-mono"><?= number_format($attrCards['leads'], 0, ',', '.') ?></div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header"><span class="kpi-label">Vendas Atribuídas</span><div class="kpi-icon-box emerald"><i data-lucide="shopping-bag" class="w-5 h-5"></i></div></div>
+                        <div class="kpi-value font-mono"><?= number_format($attrCards['sales'], 0, ',', '.') ?></div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header"><span class="kpi-label">Receita Atribuída</span><div class="kpi-icon-box emerald"><i data-lucide="trending-up" class="w-5 h-5"></i></div></div>
+                        <div class="kpi-value font-mono text-emerald-400">R$ <?= number_format($attrCards['revenue'], 2, ',', '.') ?></div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header"><span class="kpi-label">ROAS Atribuído</span><div class="kpi-icon-box indigo"><i data-lucide="award" class="w-5 h-5"></i></div></div>
+                        <div class="kpi-value font-mono <?= $attrCards['roas'] >= 2 ? 'text-emerald-400' : ($attrCards['roas'] >= 1 ? 'text-amber-400' : 'text-rose-400') ?>"><?= number_format($attrCards['roas'], 2, ',', '.') ?>x</div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header"><span class="kpi-label">CAC Reais</span><div class="kpi-icon-box rose"><i data-lucide="target" class="w-5 h-5"></i></div></div>
+                        <div class="kpi-value font-mono">R$ <?= number_format($attrCards['cac'], 2, ',', '.') ?></div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header"><span class="kpi-label">CPL Reais</span><div class="kpi-icon-box cyan"><i data-lucide="user-check" class="w-5 h-5"></i></div></div>
+                        <div class="kpi-value font-mono">R$ <?= number_format($attrCards['cpl'], 2, ',', '.') ?></div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header"><span class="kpi-label">CPM Reais</span><div class="kpi-icon-box amber"><i data-lucide="bar-chart" class="w-5 h-5"></i></div></div>
+                        <div class="kpi-value font-mono">R$ <?= number_format($attrCards['cpm'], 2, ',', '.') ?></div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header"><span class="kpi-label">CPC Médio</span><div class="kpi-icon-box indigo"><i data-lucide="navigation" class="w-5 h-5"></i></div></div>
+                        <div class="kpi-value font-mono">R$ <?= number_format($attrCards['cpc'], 2, ',', '.') ?></div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header"><span class="kpi-label">Frequência</span><div class="kpi-icon-box rose"><i data-lucide="repeat" class="w-5 h-5"></i></div></div>
+                        <div class="kpi-value font-mono"><?= number_format($attrCards['frequency'], 2, ',', '.') ?></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 6: INDICADORES GERAIS DE VENDAS -->
+            <section class="glass-card space-y-4">
+                <div class="flex items-center justify-between pb-2 border-b border-white/10">
+                    <div>
+                        <h2 class="text-base font-bold text-white">Consolidado Geral de Vendas Hotmart (Com + Sem Atribuição)</h2>
+                        <p class="text-xs text-slate-400">Total absoluto registrado na Hotmart cruzado com investimento total da Meta</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+                    <div class="p-3 bg-slate-900/60 rounded-xl border border-white/5 text-center">
+                        <span class="text-slate-400 text-xs block mb-1">Todas Vendas</span>
+                        <span class="text-lg font-bold font-mono text-white"><?= number_format($allSalesCards['sales'], 0, ',', '.') ?></span>
+                    </div>
+
+                    <div class="p-3 bg-slate-900/60 rounded-xl border border-white/5 text-center">
+                        <span class="text-slate-400 text-xs block mb-1">Receita Total</span>
+                        <span class="text-lg font-bold font-mono text-emerald-400">R$ <?= number_format($allSalesCards['revenue'], 2, ',', '.') ?></span>
+                    </div>
+
+                    <div class="p-3 bg-slate-900/60 rounded-xl border border-white/5 text-center">
+                        <span class="text-slate-400 text-xs block mb-1">ROAS Total</span>
+                        <span class="text-lg font-bold font-mono text-indigo-400"><?= number_format($allSalesCards['roas'], 2, ',', '.') ?>x</span>
+                    </div>
+
+                    <div class="p-3 bg-slate-900/60 rounded-xl border border-white/5 text-center">
+                        <span class="text-slate-400 text-xs block mb-1">CAC Total</span>
+                        <span class="text-lg font-bold font-mono text-white">R$ <?= number_format($allSalesCards['cac'], 2, ',', '.') ?></span>
+                    </div>
+
+                    <div class="p-3 bg-slate-900/60 rounded-xl border border-white/5 text-center">
+                        <span class="text-slate-400 text-xs block mb-1">CPM Total</span>
+                        <span class="text-lg font-bold font-mono text-white">R$ <?= number_format($allSalesCards['cpm'], 2, ',', '.') ?></span>
+                    </div>
+
+                    <div class="p-3 bg-slate-900/60 rounded-xl border border-white/5 text-center">
+                        <span class="text-slate-400 text-xs block mb-1">CPC Médio</span>
+                        <span class="text-lg font-bold font-mono text-white">R$ <?= number_format($allSalesCards['cpc'], 2, ',', '.') ?></span>
+                    </div>
+
+                    <div class="p-3 bg-slate-900/60 rounded-xl border border-white/5 text-center">
+                        <span class="text-slate-400 text-xs block mb-1">Frequência</span>
+                        <span class="text-lg font-bold font-mono text-white"><?= number_format($allSalesCards['frequency'], 2, ',', '.') ?></span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 7: ANÁLISE DE VENDAS E EVENTOS -->
+            <section class="glass-card space-y-6">
+                <h2 class="text-base font-bold text-white flex items-center gap-2">
+                    <i data-lucide="bar-chart-3" class="w-5 h-5 text-indigo-400"></i>
+                    <span>Análise Detalhada de Vendas, Pagamentos e Funil</span>
+                </h2>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-slate-900/60 p-4 rounded-xl border border-white/5">
+                        <h4 class="text-xs font-semibold text-slate-300 mb-3">Vendas Atribuídas x Não Atribuídas</h4>
+                        <div class="h-64"><canvas id="salesAttributionPieChart"></canvas></div>
+                    </div>
+                    <div class="bg-slate-900/60 p-4 rounded-xl border border-white/5">
+                        <h4 class="text-xs font-semibold text-slate-300 mb-3">Formas de Pagamento</h4>
+                        <div class="h-64"><canvas id="salesPaymentBarChart"></canvas></div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-slate-900/60 p-4 rounded-xl border border-white/5">
+                        <h4 class="text-xs font-semibold text-slate-300 mb-3">Distribuição de Parcelamento</h4>
+                        <div class="h-64"><canvas id="salesInstallmentsBarChart"></canvas></div>
+                    </div>
+                    <div class="bg-slate-900/60 p-4 rounded-xl border border-white/5">
+                        <h4 class="text-xs font-semibold text-slate-300 mb-3">Eventos Não Concluídos (Pix/Boleto Gerados)</h4>
+                        <div class="h-64"><canvas id="nonCompletedEventsPieChart"></canvas></div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900/60 p-4 rounded-xl border border-white/5">
+                    <h4 class="text-xs font-semibold text-slate-300 mb-3">Tempo entre Inscrição (Lead) e a Compra (Dias)</h4>
+                    <div class="h-64"><canvas id="leadToSaleDelayBarChart"></canvas></div>
+                </div>
+            </section>
+
+            <!-- SECTION 8: TABELA DE TENDÊNCIAS DE EFICIÊNCIA -->
+            <section class="glass-card space-y-4">
+                <h2 class="text-base font-bold text-white flex items-center gap-2">
+                    <i data-lucide="trending-up" class="w-5 h-5 text-emerald-400"></i>
+                    <span>Tendências de Eficiência Comparativa (Períodos A, B, C)</span>
+                </h2>
+
+                <div class="table-container">
+                    <table class="pro-table">
+                        <thead>
+                            <tr>
+                                <th>Comparativo</th>
+                                <th>CAC</th>
+                                <th>CPL</th>
+                                <th>ROAS</th>
+                                <th>CPM</th>
+                                <th>Frequência</th>
+                                <th>CPC</th>
                             </tr>
-                        <?php endforeach; ?>
-                    <?php endforeach; ?>
-                <?php endforeach; endif; ?>
-                </tbody>
-            </table>
-        </div>
-    </section>
+                        </thead>
+                        <tbody>
+                        <?php if (!$attrTrendRows): ?>
+                            <tr><td colspan="7" class="text-center text-slate-500 py-6">Sem dados atribuídos para cálculo de tendência.</td></tr>
+                        <?php else: foreach ($attrTrendRows as $trend): ?>
+                            <tr>
+                                <td class="font-semibold text-white"><?= h($trend['label']) ?></td>
+                                <?php foreach (array('cac','cpl','roas','cpm','frequency','cpc') as $metric): $m = $trend['metrics'][$metric]; $isMoney = in_array($metric, array('cac','cpl','cpm','cpc'), true); ?>
+                                    <td>
+                                        <div class="text-xs font-mono"><?= $isMoney ? 'R$ ' . number_format((float)$m['current'], 2, ',', '.') . ' / R$ ' . number_format((float)$m['baseline'], 2, ',', '.') : number_format((float)$m['current'], 2, ',', '.') . ' / ' . number_format((float)$m['baseline'], 2, ',', '.') ?></div>
+                                        <span class="trend <?= h($m['direction']) ?> text-xs">
+                                            <?= $m['change'] === null ? '—' : (($m['change'] > 0 ? '+' : '') . number_format($m['change'], 1, ',', '.') . '%') ?>
+                                        </span>
+                                    </td>
+                                <?php endforeach; ?>
+                            </tr>
+                        <?php endforeach; endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
 
-    <section class="panel">
-        <div class="section-head"><h2>Campanhas Meta de hoje</h2></div>
-        <div class="table-wrap">
-            <table>
-                <thead><tr><th>Campanha</th><th>Gasto</th><th>Impressões</th><th>Reach</th><th>Freq.</th><th>Cliques</th><th>CTR</th><th>CPC</th><th>CPM</th><th>Leads</th><th>Compras</th></tr></thead>
-                <tbody>
-                <?php if (!$metaCampaignRows): ?>
-                    <tr><td colspan="11">Ainda sem campanhas sincronizadas hoje.</td></tr>
-                <?php else: foreach ($metaCampaignRows as $row): ?>
-                    <tr>
-                        <td><?= h((string)$row['campaign_name']) ?></td>
-                        <td>R$ <?= number_format((float)$row['spend'], 2, ',', '.') ?></td>
-                        <td><?= number_format((float)$row['impressions'], 0, ',', '.') ?></td>
-                        <td><?= number_format((float)$row['reach'], 0, ',', '.') ?></td>
-                        <td><?= number_format((float)$row['frequency'], 2, ',', '.') ?></td>
-                        <td><?= number_format((float)$row['clicks'], 0, ',', '.') ?></td>
-                        <td><?= number_format((float)$row['ctr'], 2, ',', '.') ?>%</td>
-                        <td>R$ <?= number_format((float)$row['cpc'], 2, ',', '.') ?></td>
-                        <td>R$ <?= number_format((float)$row['cpm'], 2, ',', '.') ?></td>
-                        <td><?= number_format((float)$row['leads'], 0, ',', '.') ?></td>
-                        <td><?= number_format((float)$row['purchases'], 0, ',', '.') ?></td>
-                    </tr>
-                <?php endforeach; endif; ?>
-                </tbody>
-            </table>
-        </div>
-    </section>
+            <!-- SECTION 9: REAL PERÍODO FILTRADO GRÁFICOS -->
+            <section class="glass-card space-y-4">
+                <h2 class="text-base font-bold text-white flex items-center gap-2">
+                    <i data-lucide="line-chart" class="w-5 h-5 text-indigo-400"></i>
+                    <span>Receita e Eficiência do Período Filtrado</span>
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-slate-900/60 p-4 rounded-xl border border-white/5"><div class="h-64"><canvas id="attrRevenueChart"></canvas></div></div>
+                    <div class="bg-slate-900/60 p-4 rounded-xl border border-white/5"><div class="h-64"><canvas id="attrEfficiencyChart"></canvas></div></div>
+                </div>
+            </section>
 
-    <section class="panel">
-        <div class="section-head"><h2>Últimas vendas atribuídas</h2>
-            <div class="sales-actions-inline">
-                <form method="get" class="inline-controls">
-                    <?php foreach ($_GET as $k => $v): if (in_array($k, array('sales_per_page','sales_page','download_sales','download_limit'), true)) continue; if (is_array($v)) { foreach ($v as $vv) { ?><input type="hidden" name="<?= h($k) ?>[]" value="<?= h($vv) ?>"><?php } } else { ?><input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>"><?php } endforeach; ?>
-                    <label>Linhas</label>
-                    <select name="sales_per_page" onchange="this.form.submit()">
-                        <?php foreach ($salesPerPageOptions as $opt): ?><option value="<?= $opt ?>" <?= $salesPerPage === $opt ? 'selected' : '' ?>><?= $opt ?></option><?php endforeach; ?>
-                    </select>
-                    <input type="hidden" name="sales_page" value="1">
-                </form>
-                <form method="get" class="inline-controls">
-                    <?php foreach ($_GET as $k => $v): if (in_array($k, array('download_sales','download_limit'), true)) continue; if (is_array($v)) { foreach ($v as $vv) { ?><input type="hidden" name="<?= h($k) ?>[]" value="<?= h($vv) ?>"><?php } } else { ?><input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>"><?php } endforeach; ?>
-                    <input type="hidden" name="download_sales" value="1">
-                    <label>Excel</label>
-                    <select name="download_limit"><option value="100">100</option><option value="200">200</option><option value="500">500</option><option value="1000">1000</option><option value="all">Todas</option></select>
-                    <button type="submit" class="small-btn">Baixar</button>
-                </form>
-            </div>
         </div>
-        <div class="table-wrap">
-            <table>
-                <thead><tr><th>HP</th><th>Nome</th><th>Email</th><th>Data</th><th>Valor</th><th>Campanha do Facebook</th><th>Conjunto</th><th>Anúncio</th><th>Attr Source</th><th>Attr Grupo</th><th>Attr Conjunto</th><th>Attr Anúncio</th><th>Attr Term</th><th>Lead Source</th><th>Lead Medium</th><th>Lead Campaign</th><th>Lead Term</th><th>Lead Content</th></tr></thead>
-                <tbody>
-                <?php if (!$salesRowsPage): ?><tr><td colspan="18">Nenhuma venda encontrada para os filtros.</td></tr><?php else: foreach ($salesRowsPage as $row): ?>
-                    <tr>
-                        <td><?= h((string)($row['transaction_code'] ?? '')) ?></td>
-                        <td><?= h((string)($row['buyer_name'] ?? '')) ?></td>
-                        <td><?= h((string)($row['buyer_email'] ?? '')) ?></td>
-                        <td><?= h((string)($row['sale_date'] ?? '')) ?></td>
-                        <td>R$ <?= number_format((float)($row['revenue_value'] ?? 0), 2, ',', '.') ?></td>
-                        <td><?= h((string)($row['campaign_group'] ?? '')) ?></td>
-                        <td><?= h((string)($row['campaign_name'] ?? '')) ?></td>
-                        <td><?= h((string)($row['ad_name'] ?? '')) ?></td>
-                        <td><?= h((string)($row['attributed_utm_source'] ?? '')) ?></td>
-                        <td><?= h((string)($row['attributed_utm_campaign_group'] ?? '')) ?></td>
-                        <td><?= h((string)($row['attributed_utm_campaign_name'] ?? '')) ?></td>
-                        <td><?= h((string)($row['attributed_utm_ad_name'] ?? '')) ?></td>
-                        <td><?= h((string)($row['attributed_utm_term'] ?? '')) ?></td>
-                        <td><?= h((string)($row['lead_utm_source'] ?? '')) ?></td>
-                        <td><?= h((string)($row['lead_utm_medium'] ?? '')) ?></td>
-                        <td><?= h((string)($row['lead_utm_campaign'] ?? '')) ?></td>
-                        <td><?= h((string)($row['lead_utm_term'] ?? '')) ?></td>
-                        <td><?= h((string)($row['lead_utm_content'] ?? '')) ?></td>
-                    </tr>
-                <?php endforeach; endif; ?>
-                </tbody>
-            </table>
-        </div>
-        <div class="pagination-bar"><span>Mostrando <?= $salesTotal ? (($salesPage - 1) * $salesPerPage + 1) : 0 ?>–<?= min($salesPage * $salesPerPage, $salesTotal) ?> de <?= $salesTotal ?></span><div class="pagination-links"><?php $baseParams = $_GET; $baseParams['sales_per_page'] = $salesPerPage; for ($p=1; $p<=$salesTotalPages; $p++): if ($p > 7 && abs($p - $salesPage) > 2 && $p !== 1 && $p !== $salesTotalPages) continue; $baseParams['sales_page'] = $p; ?><a class="page-link <?= $p === $salesPage ? 'active' : '' ?>" href="?<?= h(http_build_query($baseParams)) ?>"><?= $p ?></a><?php endfor; ?></div></div>
-    </section>
-
-    <section class="panel collapsible-panel">
-        <div class="section-head"><h2>Últimas sincronizações de atribuição</h2><button type="button" class="small-btn" data-toggle-collapsible="#attr-sync-table">Expandir</button></div>
-        <div class="table-wrap collapsible-content" id="attr-sync-table"><table><thead><tr><th>ID</th><th>Tipo</th><th>Status</th><th>Início</th><th>Fim</th><th>Mensagem</th><th>Stats</th></tr></thead><tbody><?php if (!$recentAttrRuns): ?><tr><td colspan="7">Nenhuma sincronização de atribuição encontrada.</td></tr><?php else: foreach ($recentAttrRuns as $idx => $run): ?><tr class="<?= $idx >= 5 ? 'sync-extra hidden' : '' ?>"><td>#<?= (int)$run['id'] ?></td><td><?= h((string)$run['run_type']) ?></td><td><?= h((string)$run['status']) ?></td><td><?= h((string)$run['started_at']) ?></td><td><?= h((string)($run['finished_at'] ?? '')) ?></td><td><?= h((string)($run['message'] ?? '')) ?></td><td><small><?= h((string)($run['stats_json'] ?? '')) ?></small></td></tr><?php endforeach; endif; ?></tbody></table></div>
-    </section>
-
-    <section class="panel collapsible-panel">
-        <div class="section-head"><h2>Últimas sincronizações Meta</h2><button type="button" class="small-btn" data-toggle-collapsible="#meta-sync-table">Expandir</button></div>
-        <div class="table-wrap collapsible-content" id="meta-sync-table"><table><thead><tr><th>ID</th><th>Escopo</th><th>Período</th><th>Status</th><th>Linhas</th><th>Início</th><th>Fim</th><th>Mensagem</th></tr></thead><tbody><?php if (!$recentRuns): ?><tr><td colspan="8">Nenhuma sincronização encontrada.</td></tr><?php else: foreach ($recentRuns as $idx => $run): ?><tr class="<?= $idx >= 5 ? 'sync-extra hidden' : '' ?>"><td>#<?= (int)$run['id'] ?></td><td><?= h((string)$run['scope']) ?></td><td><?= h((string)$run['date_from']) ?> até <?= h((string)$run['date_to']) ?></td><td><?= h((string)$run['status']) ?></td><td><?= (int)$run['rows_upserted'] ?></td><td><?= h((string)$run['started_at']) ?></td><td><?= h((string)($run['finished_at'] ?? '')) ?></td><td><?= h((string)($run['message'] ?? '')) ?></td></tr><?php endforeach; endif; ?></tbody></table></div>
-    </section>
+    </main>
 </div>
+
 <script>
 window.metaChartData = <?= json_encode($metaChart, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 window.attrChartData = <?= json_encode($attrChart, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 window.salesExtraCharts = <?= json_encode(array('attribVsNon'=>$attribVsNon,'payment'=>$paymentChart,'installments'=>$installmentChart,'nonCompleted'=>$nonCompletedChart,'delay'=>$delayChart), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 </script>
-<script src="../assets/js/app.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/app-pro.js"></script>
 </body>
 </html>
