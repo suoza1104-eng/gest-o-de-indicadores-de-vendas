@@ -1,4 +1,9 @@
 <?php
+// DEBUG TEMPORARIO - remover apos diagnostico do erro 500
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
+error_reporting(E_ALL);
+
 session_start();
 
 $sessionTimeout = 7200; // 2 horas de inatividade
