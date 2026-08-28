@@ -147,14 +147,20 @@ function ensure_meta_integration_schema(PDO $pdo): void
     }
 
     $columns = [
+        'status' => "ALTER TABLE meta_integrations ADD COLUMN status ENUM('active','inactive') NOT NULL DEFAULT 'active'",
         'currency_code' => "ALTER TABLE meta_integrations ADD COLUMN currency_code VARCHAR(3) NOT NULL DEFAULT 'BRL'",
         'currency_spread_percent' => "ALTER TABLE meta_integrations ADD COLUMN currency_spread_percent DECIMAL(8,4) NOT NULL DEFAULT 0.0000",
         'manual_exchange_rate' => "ALTER TABLE meta_integrations ADD COLUMN manual_exchange_rate DECIMAL(12,6) DEFAULT NULL",
     ];
 
     foreach ($columns as $column => $sql) {
-        if (!column_exists($pdo, 'meta_integrations', $column)) {
+        if (column_exists($pdo, 'meta_integrations', $column)) {
+            continue;
+        }
+        try {
             $pdo->exec($sql);
+        } catch (\PDOException $e) {
+            error_log('ensure_meta_integration_schema: falha ao adicionar coluna ' . $column . ': ' . $e->getMessage());
         }
     }
 }
