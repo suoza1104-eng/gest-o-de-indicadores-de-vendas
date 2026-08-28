@@ -139,16 +139,31 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    async function ensureIntegrationSaved() {
+        const formData = new FormData(formIntegration);
+        const data = await apiFetch('../api/save_integration.php', { method: 'POST', body: formData });
+        if (!data.ok) {
+            throw new Error(data.message || 'Erro ao salvar integração.');
+        }
+        const idField = formIntegration.querySelector('[name="id"]');
+        if (idField && data.integration_id) idField.value = data.integration_id;
+        return idField ? idField.value : '';
+    }
+
     const btnTest = document.getElementById('btn-test');
     if (btnTest) {
         btnTest.addEventListener('click', async () => {
             setButtonLoading(btnTest, true, 'Testando...');
-            const data = await apiFetch('../api/test_connection.php');
-            setButtonLoading(btnTest, false);
-            if (data.ok) {
-                showToast(data.message || 'Conexão com a Meta efetuada com sucesso!', 'success');
-            } else {
-                showToast(data.message || 'Erro no teste de conexão Meta.', 'error');
+            try {
+                const integrationId = await ensureIntegrationSaved();
+                const fd = new FormData();
+                fd.append('integration_id', integrationId);
+                const data = await apiFetch('../api/test_connection.php', { method: 'POST', body: fd });
+                setButtonLoading(btnTest, false);
+                showToast(data.ok ? (data.message || 'Conexão com a Meta efetuada com sucesso!') : (data.message || 'Erro no teste de conexão Meta.'), data.ok ? 'success' : 'error');
+            } catch (e) {
+                setButtonLoading(btnTest, false);
+                showToast(e.message || 'Erro ao testar conexão.', 'error');
             }
         });
     }
@@ -157,13 +172,23 @@ document.addEventListener('DOMContentLoaded', function () {
     if (btnSync) {
         btnSync.addEventListener('click', async () => {
             setButtonLoading(btnSync, true, 'Sincronizando Meta...');
-            const data = await apiFetch('../api/run_sync.php');
-            setButtonLoading(btnSync, false);
-            if (data.ok) {
-                showToast(data.message || 'Sincronização Meta (3 dias) concluída!', 'success');
-                setTimeout(() => location.reload(), 1500);
-            } else {
-                showToast(data.message || 'Erro ao sincronizar dados da Meta.', 'error');
+            try {
+                const integrationId = await ensureIntegrationSaved();
+                const fd = new FormData();
+                fd.append('integration_id', integrationId);
+                fd.append('scope', 'all');
+                fd.append('mode', 'daily');
+                const data = await apiFetch('../api/run_sync.php', { method: 'POST', body: fd });
+                setButtonLoading(btnSync, false);
+                if (data.ok) {
+                    showToast(data.message || 'Sincronização Meta (3 dias) concluída!', 'success');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showToast(data.message || 'Erro ao sincronizar dados da Meta.', 'error');
+                }
+            } catch (e) {
+                setButtonLoading(btnSync, false);
+                showToast(e.message || 'Erro ao sincronizar Meta.', 'error');
             }
         });
     }
@@ -172,13 +197,22 @@ document.addEventListener('DOMContentLoaded', function () {
     if (btnAttrSync) {
         btnAttrSync.addEventListener('click', async () => {
             setButtonLoading(btnAttrSync, true, 'Atribuindo...');
-            const data = await apiFetch('../api/run_attribution_sync.php');
-            setButtonLoading(btnAttrSync, false);
-            if (data.ok) {
-                showToast(data.message || 'Atribuição (3 dias) recalculada com sucesso!', 'success');
-                setTimeout(() => location.reload(), 1500);
-            } else {
-                showToast(data.message || 'Erro ao reprocessar atribuição.', 'error');
+            try {
+                const integrationId = await ensureIntegrationSaved();
+                const fd = new FormData();
+                fd.append('integration_id', integrationId);
+                fd.append('mode', 'daily');
+                const data = await apiFetch('../api/run_attribution_sync.php', { method: 'POST', body: fd });
+                setButtonLoading(btnAttrSync, false);
+                if (data.ok) {
+                    showToast(data.message || 'Atribuição (3 dias) recalculada com sucesso!', 'success');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showToast(data.message || 'Erro ao reprocessar atribuição.', 'error');
+                }
+            } catch (e) {
+                setButtonLoading(btnAttrSync, false);
+                showToast(e.message || 'Erro ao reprocessar atribuição.', 'error');
             }
         });
     }
@@ -187,14 +221,27 @@ document.addEventListener('DOMContentLoaded', function () {
     if (btnSyncAll) {
         btnSyncAll.addEventListener('click', async () => {
             setButtonLoading(btnSyncAll, true, 'Sincronizando tudo...');
-            const res1 = await apiFetch('../api/run_sync.php');
-            const res2 = await apiFetch('../api/run_attribution_sync.php');
-            setButtonLoading(btnSyncAll, false);
-            if (res1.ok && res2.ok) {
-                showToast('Sincronização completa de Meta + Atribuição finalizada!', 'success');
-                setTimeout(() => location.reload(), 1500);
-            } else {
-                showToast('Aviso: Ocorreram falhas durante a sincronização completa.', 'error');
+            try {
+                const integrationId = await ensureIntegrationSaved();
+                const fdMeta = new FormData();
+                fdMeta.append('integration_id', integrationId);
+                fdMeta.append('scope', 'all');
+                fdMeta.append('mode', 'daily');
+                const res1 = await apiFetch('../api/run_sync.php', { method: 'POST', body: fdMeta });
+                const fdAttr = new FormData();
+                fdAttr.append('integration_id', integrationId);
+                fdAttr.append('mode', 'daily');
+                const res2 = await apiFetch('../api/run_attribution_sync.php', { method: 'POST', body: fdAttr });
+                setButtonLoading(btnSyncAll, false);
+                if (res1.ok && res2.ok) {
+                    showToast('Sincronização completa de Meta + Atribuição finalizada!', 'success');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showToast('Aviso: Ocorreram falhas durante a sincronização completa.', 'error');
+                }
+            } catch (e) {
+                setButtonLoading(btnSyncAll, false);
+                showToast(e.message || 'Erro na sincronização completa.', 'error');
             }
         });
     }
@@ -206,13 +253,24 @@ document.addEventListener('DOMContentLoaded', function () {
             const days = daysInput ? daysInput.value : 30;
             if (!confirm(`Deseja importar o histórico dos últimos ${days} dias da Meta?`)) return;
             setButtonLoading(btnSyncHistory, true, 'Buscando histórico...');
-            const data = await apiFetch(`../api/run_sync.php?days=${days}`);
-            setButtonLoading(btnSyncHistory, false);
-            if (data.ok) {
-                showToast(`Histórico Meta de ${days} dias importado!`, 'success');
-                setTimeout(() => location.reload(), 1500);
-            } else {
-                showToast(data.message || 'Erro na carga histórica Meta.', 'error');
+            try {
+                const integrationId = await ensureIntegrationSaved();
+                const fd = new FormData();
+                fd.append('integration_id', integrationId);
+                fd.append('scope', 'all');
+                fd.append('mode', 'history');
+                fd.append('days', days);
+                const data = await apiFetch('../api/run_sync.php', { method: 'POST', body: fd });
+                setButtonLoading(btnSyncHistory, false);
+                if (data.ok) {
+                    showToast(`Histórico Meta de ${days} dias importado!`, 'success');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showToast(data.message || 'Erro na carga histórica Meta.', 'error');
+                }
+            } catch (e) {
+                setButtonLoading(btnSyncHistory, false);
+                showToast(e.message || 'Erro na carga histórica Meta.', 'error');
             }
         });
     }
@@ -224,13 +282,23 @@ document.addEventListener('DOMContentLoaded', function () {
             const days = daysInput ? daysInput.value : 90;
             if (!confirm(`Deseja reprocessar a atribuição dos últimos ${days} dias?`)) return;
             setButtonLoading(btnAttrHistory, true, 'Processando...');
-            const data = await apiFetch(`../api/run_attribution_sync.php?days=${days}`);
-            setButtonLoading(btnAttrHistory, false);
-            if (data.ok) {
-                showToast(`Carga histórica de atribuição (${days}d) finalizada!`, 'success');
-                setTimeout(() => location.reload(), 1500);
-            } else {
-                showToast(data.message || 'Erro ao processar histórico de atribuição.', 'error');
+            try {
+                const integrationId = await ensureIntegrationSaved();
+                const fd = new FormData();
+                fd.append('integration_id', integrationId);
+                fd.append('mode', 'history');
+                fd.append('days', days);
+                const data = await apiFetch('../api/run_attribution_sync.php', { method: 'POST', body: fd });
+                setButtonLoading(btnAttrHistory, false);
+                if (data.ok) {
+                    showToast(`Carga histórica de atribuição (${days}d) finalizada!`, 'success');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showToast(data.message || 'Erro ao processar histórico de atribuição.', 'error');
+                }
+            } catch (e) {
+                setButtonLoading(btnAttrHistory, false);
+                showToast(e.message || 'Erro ao processar histórico de atribuição.', 'error');
             }
         });
     }
@@ -315,7 +383,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const integrationForm = document.getElementById('integration-form');
     if (integrationForm) {
         const integrationDefaults = {
-            id: '', name: 'Meta Principal', ad_account_id: '', app_id: '', app_secret: '',
+            id: '', name: '', ad_account_id: '', app_id: '', app_secret: '',
             access_token: '', sync_interval_minutes: 30, status: 'active', timezone: 'America/Sao_Paulo',
             currency_code: 'BRL', currency_spread_percent: 0, manual_exchange_rate: ''
         };
