@@ -129,6 +129,7 @@ function merge_daily_buckets(array $metaRows, array $salesRows, $granularity)
             $bucket[$key] = array(
                 'label' => $key,
                 'spend' => 0.0,
+                'spend_real' => 0.0,
                 'leads' => 0,
                 'sales' => 0,
                 'revenue' => 0.0,
@@ -141,6 +142,7 @@ function merge_daily_buckets(array $metaRows, array $salesRows, $granularity)
             );
         }
         $bucket[$key]['spend'] += (float)$row['spend'];
+        $bucket[$key]['spend_real'] += (float)($row['spend_real'] ?? $row['spend']);
         $bucket[$key]['leads'] += (int)$row['leads'];
         $bucket[$key]['cpm_sum'] += (float)$row['cpm'];
         $bucket[$key]['cpm_rows'] += 1;
@@ -155,6 +157,7 @@ function merge_daily_buckets(array $metaRows, array $salesRows, $granularity)
             $bucket[$key] = array(
                 'label' => $key,
                 'spend' => 0.0,
+                'spend_real' => 0.0,
                 'leads' => 0,
                 'sales' => 0,
                 'revenue' => 0.0,
@@ -186,6 +189,7 @@ function merge_real_buckets(array $metaRows, array $leadRows, array $salesRows, 
             $bucket[$key] = array(
                 'label' => $key,
                 'spend' => 0.0,
+                'spend_real' => 0.0,
                 'leads' => 0,
                 'sales' => 0,
                 'revenue' => 0.0,
@@ -198,6 +202,7 @@ function merge_real_buckets(array $metaRows, array $leadRows, array $salesRows, 
             );
         }
         $bucket[$key]['spend'] += (float)$row['spend'];
+        $bucket[$key]['spend_real'] += (float)($row['spend_real'] ?? $row['spend']);
         $bucket[$key]['cpm_sum'] += (float)$row['cpm'];
         $bucket[$key]['cpm_rows'] += 1;
         $bucket[$key]['frequency_sum'] += (float)$row['frequency'];
@@ -211,6 +216,7 @@ function merge_real_buckets(array $metaRows, array $leadRows, array $salesRows, 
             $bucket[$key] = array(
                 'label' => $key,
                 'spend' => 0.0,
+                'spend_real' => 0.0,
                 'leads' => 0,
                 'sales' => 0,
                 'revenue' => 0.0,
@@ -230,6 +236,7 @@ function merge_real_buckets(array $metaRows, array $leadRows, array $salesRows, 
             $bucket[$key] = array(
                 'label' => $key,
                 'spend' => 0.0,
+                'spend_real' => 0.0,
                 'leads' => 0,
                 'sales' => 0,
                 'revenue' => 0.0,
@@ -309,20 +316,21 @@ function integration_filter_sql($integrationIds): string
 
 function fetch_meta_real_daily_rows(PDO $pdo, $integrationIds, $dateFrom, $dateTo, array $campaignFilters = array(), $adsetFilter = '')
 {
+    $spreadExpr = "mtd.spend * (1 + (CASE WHEN mi.currency_code = 'USD' THEN mi.currency_spread_percent ELSE 0 END) / 100)";
     if ($adsetFilter !== '') {
-        $sql = "SELECT report_date, SUM(spend) AS spend, SUM(impressions) AS impressions, SUM(reach) AS reach, AVG(frequency) AS frequency, SUM(clicks) AS clicks, CASE WHEN SUM(clicks) > 0 THEN SUM(spend) / SUM(clicks) ELSE 0 END AS cpc, CASE WHEN SUM(impressions) > 0 THEN (SUM(spend) / SUM(impressions)) * 1000 ELSE 0 END AS cpm FROM meta_adset_daily WHERE " . integration_filter_sql($integrationIds) . " AND report_date BETWEEN :date_from AND :date_to AND adset_name = :adset_name";
+        $sql = "SELECT mtd.report_date, SUM(mtd.spend) AS spend, SUM($spreadExpr) AS spend_real, SUM(mtd.impressions) AS impressions, SUM(mtd.reach) AS reach, AVG(mtd.frequency) AS frequency, SUM(mtd.clicks) AS clicks, CASE WHEN SUM(mtd.clicks) > 0 THEN SUM(mtd.spend) / SUM(mtd.clicks) ELSE 0 END AS cpc, CASE WHEN SUM(mtd.impressions) > 0 THEN (SUM(mtd.spend) / SUM(mtd.impressions)) * 1000 ELSE 0 END AS cpm FROM meta_adset_daily mtd JOIN meta_integrations mi ON mi.id = mtd.integration_id WHERE " . integration_filter_sql($integrationIds) . " AND mtd.report_date BETWEEN :date_from AND :date_to AND mtd.adset_name = :adset_name";
         $params = array(':date_from' => $dateFrom, ':date_to' => $dateTo, ':adset_name' => $adsetFilter);
         if ($campaignFilters) {
             $sql .= build_in_condition($campaignFilters, 'campaign', $params, 'campaign_name');
         }
-        $sql .= ' GROUP BY report_date ORDER BY report_date';
+        $sql .= ' GROUP BY mtd.report_date ORDER BY mtd.report_date';
     } else {
-        $sql = "SELECT report_date, SUM(spend) AS spend, SUM(impressions) AS impressions, SUM(reach) AS reach, AVG(frequency) AS frequency, SUM(clicks) AS clicks, CASE WHEN SUM(clicks) > 0 THEN SUM(spend) / SUM(clicks) ELSE 0 END AS cpc, CASE WHEN SUM(impressions) > 0 THEN (SUM(spend) / SUM(impressions)) * 1000 ELSE 0 END AS cpm FROM meta_campaign_daily WHERE " . integration_filter_sql($integrationIds) . " AND report_date BETWEEN :date_from AND :date_to";
+        $sql = "SELECT mtd.report_date, SUM(mtd.spend) AS spend, SUM($spreadExpr) AS spend_real, SUM(mtd.impressions) AS impressions, SUM(mtd.reach) AS reach, AVG(mtd.frequency) AS frequency, SUM(mtd.clicks) AS clicks, CASE WHEN SUM(mtd.clicks) > 0 THEN SUM(mtd.spend) / SUM(mtd.clicks) ELSE 0 END AS cpc, CASE WHEN SUM(mtd.impressions) > 0 THEN (SUM(mtd.spend) / SUM(mtd.impressions)) * 1000 ELSE 0 END AS cpm FROM meta_campaign_daily mtd JOIN meta_integrations mi ON mi.id = mtd.integration_id WHERE " . integration_filter_sql($integrationIds) . " AND mtd.report_date BETWEEN :date_from AND :date_to";
         $params = array(':date_from' => $dateFrom, ':date_to' => $dateTo);
         if ($campaignFilters) {
             $sql .= build_in_condition($campaignFilters, 'campaign', $params, 'campaign_name');
         }
-        $sql .= ' GROUP BY report_date ORDER BY report_date';
+        $sql .= ' GROUP BY mtd.report_date ORDER BY mtd.report_date';
     }
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
@@ -640,18 +648,21 @@ function fetch_total_sales_summary(PDO $pdo, $start, $end, $productFilter = '')
 
 function fetch_meta_period_summary(PDO $pdo, $integrationIds, $start, $end)
 {
-    $stmt = $pdo->prepare("SELECT COALESCE(SUM(spend),0) AS spend,
-                                  COALESCE(SUM(impressions),0) AS impressions,
-                                  COALESCE(SUM(reach),0) AS reach,
-                                  COALESCE(SUM(clicks),0) AS clicks,
-                                  COALESCE(SUM(leads),0) AS leads
-                           FROM meta_account_daily
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(mad.spend),0) AS spend,
+                                  COALESCE(SUM(mad.spend * (1 + (CASE WHEN mi.currency_code = 'USD' THEN mi.currency_spread_percent ELSE 0 END) / 100)),0) AS spend_real,
+                                  COALESCE(SUM(mad.impressions),0) AS impressions,
+                                  COALESCE(SUM(mad.reach),0) AS reach,
+                                  COALESCE(SUM(mad.clicks),0) AS clicks,
+                                  COALESCE(SUM(mad.leads),0) AS leads
+                           FROM meta_account_daily mad
+                           JOIN meta_integrations mi ON mi.id = mad.integration_id
                            WHERE " . integration_filter_sql($integrationIds) . "
-                             AND report_date BETWEEN :start AND :end");
+                             AND mad.report_date BETWEEN :start AND :end");
     $stmt->execute(array(':start' => $start, ':end' => $end));
     $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: array();
     return array(
         'spend' => (float)($row['spend'] ?? 0),
+        'spend_real' => (float)($row['spend_real'] ?? ($row['spend'] ?? 0)),
         'impressions' => (float)($row['impressions'] ?? 0),
         'reach' => (float)($row['reach'] ?? 0),
         'clicks' => (float)($row['clicks'] ?? 0),
@@ -1206,7 +1217,7 @@ $metaDaily = array();
 $metaCampaignRows = array();
 $recentRuns = array();
 $recentAttrRuns = array();
-$attrCards = array('spend'=>0.0,'leads'=>0,'sales'=>0,'revenue'=>0.0,'cac'=>0.0,'roas'=>0.0,'cpl'=>0.0,'cpa'=>0.0,'frequency'=>0.0,'cpm'=>0.0,'cpc'=>0.0);
+$attrCards = array('spend'=>0.0,'spend_real'=>0.0,'leads'=>0,'sales'=>0,'revenue'=>0.0,'cac'=>0.0,'roas'=>0.0,'cpl'=>0.0,'cpa'=>0.0,'frequency'=>0.0,'cpm'=>0.0,'cpc'=>0.0);
 $attrTrendRows = array();
 $attrDaily = array();
 $attrTopRows = array();
@@ -1220,11 +1231,11 @@ $metaHierarchy = array();
 if ($integrationIds) {
     ensure_manual_attribution_table($pdo);
     $metaHierarchy = fetch_meta_hierarchy($pdo, $integrationIds);
-    $stmt = $pdo->prepare('SELECT COALESCE(SUM(spend),0) AS spend, COALESCE(SUM(impressions),0) AS impressions, COALESCE(SUM(clicks),0) AS clicks, COALESCE(SUM(leads),0) AS leads, CASE WHEN SUM(impressions) > 0 THEN (SUM(spend) / SUM(impressions)) * 1000 ELSE 0 END AS cpm, CASE WHEN SUM(reach) > 0 THEN SUM(impressions) / SUM(reach) ELSE 0 END AS frequency FROM meta_campaign_daily WHERE integration_id IN (' . $integrationIdSql . ') AND report_date = :report_date');
+    $stmt = $pdo->prepare('SELECT COALESCE(SUM(mcd.spend),0) AS spend, COALESCE(SUM(mcd.spend * (1 + (CASE WHEN mi.currency_code = \'USD\' THEN mi.currency_spread_percent ELSE 0 END) / 100)),0) AS spend_real, COALESCE(SUM(mcd.impressions),0) AS impressions, COALESCE(SUM(mcd.clicks),0) AS clicks, COALESCE(SUM(mcd.leads),0) AS leads, CASE WHEN SUM(mcd.impressions) > 0 THEN (SUM(mcd.spend) / SUM(mcd.impressions)) * 1000 ELSE 0 END AS cpm, CASE WHEN SUM(mcd.reach) > 0 THEN SUM(mcd.impressions) / SUM(mcd.reach) ELSE 0 END AS frequency FROM meta_campaign_daily mcd JOIN meta_integrations mi ON mi.id = mcd.integration_id WHERE mcd.integration_id IN (' . $integrationIdSql . ') AND mcd.report_date = :report_date');
     $stmt->execute(array('report_date' => $today));
     $metaCards = $stmt->fetch() ?: $metaCards;
 
-    $stmt = $pdo->prepare('SELECT report_date, SUM(spend) AS spend, SUM(leads) AS leads, CASE WHEN SUM(impressions) > 0 THEN (SUM(spend) / SUM(impressions)) * 1000 ELSE 0 END AS cpm, CASE WHEN SUM(reach) > 0 THEN SUM(impressions) / SUM(reach) ELSE 0 END AS frequency FROM meta_campaign_daily WHERE integration_id IN (' . $integrationIdSql . ') AND report_date BETWEEN :start AND :end GROUP BY report_date ORDER BY report_date ASC');
+    $stmt = $pdo->prepare('SELECT mcd.report_date, SUM(mcd.spend) AS spend, SUM(mcd.spend * (1 + (CASE WHEN mi.currency_code = \'USD\' THEN mi.currency_spread_percent ELSE 0 END) / 100)) AS spend_real, SUM(mcd.leads) AS leads, CASE WHEN SUM(mcd.impressions) > 0 THEN (SUM(mcd.spend) / SUM(mcd.impressions)) * 1000 ELSE 0 END AS cpm, CASE WHEN SUM(mcd.reach) > 0 THEN SUM(mcd.impressions) / SUM(mcd.reach) ELSE 0 END AS frequency FROM meta_campaign_daily mcd JOIN meta_integrations mi ON mi.id = mcd.integration_id WHERE mcd.integration_id IN (' . $integrationIdSql . ') AND mcd.report_date BETWEEN :start AND :end GROUP BY mcd.report_date ORDER BY mcd.report_date ASC');
     $stmt->execute(array('start' => date('Y-m-d', strtotime('-29 days')), 'end' => $today));
     $metaDaily = $stmt->fetchAll();
 
@@ -1266,6 +1277,7 @@ if ($integrationIds) {
 
     foreach ($attrDaily as $row) {
         $attrCards['spend'] += (float)$row['spend'];
+        $attrCards['spend_real'] += (float)($row['spend_real'] ?? $row['spend']);
         $attrCards['leads'] += (int)$row['leads'];
         $attrCards['sales'] += (int)$row['sales'];
         $attrCards['revenue'] += (float)$row['revenue'];
@@ -1283,7 +1295,7 @@ if ($integrationIds) {
     $preciseAttributedSummary = fetch_precise_attributed_sales_summary($pdo, $attributionModel, $rangeStart, $rangeEnd, $campaignFilters, $adsetFilter, $productFilter);
     $attrCards['sales'] = (int)($preciseAttributedSummary['sales'] ?? 0);
     $attrCards['revenue'] = (float)($preciseAttributedSummary['revenue'] ?? 0);
-    $attrCards['cac'] = $attrCards['sales'] > 0 ? $attrCards['spend'] / $attrCards['sales'] : 0;
+    $attrCards['cac'] = $attrCards['sales'] > 0 ? $attrCards['spend_real'] / $attrCards['sales'] : 0;
     $attrCards['cpa'] = $attrCards['cac'];
     $attrCards['roas'] = $attrCards['spend'] > 0 ? $attrCards['revenue'] / $attrCards['spend'] : 0;
 
@@ -1301,7 +1313,7 @@ if ($integrationIds) {
         $basSales = fetch_total_sales_summary($pdo, $baseStart, $rangeEnd, $productFilter);
 
         $curSummary = array(
-            'cac' => $curSales['sales'] > 0 ? $curMeta['spend'] / $curSales['sales'] : 0.0,
+            'cac' => $curSales['sales'] > 0 ? $curMeta['spend_real'] / $curSales['sales'] : 0.0,
             'cpl' => $curMeta['leads'] > 0 ? $curMeta['spend'] / $curMeta['leads'] : 0.0,
             'roas' => $curMeta['spend'] > 0 ? $curSales['revenue'] / $curMeta['spend'] : 0.0,
             'cpm' => $curMeta['impressions'] > 0 ? ($curMeta['spend'] / $curMeta['impressions']) * 1000 : 0.0,
@@ -1309,7 +1321,7 @@ if ($integrationIds) {
             'cpc' => $curMeta['clicks'] > 0 ? $curMeta['spend'] / $curMeta['clicks'] : 0.0,
         );
         $basSummary = array(
-            'cac' => $basSales['sales'] > 0 ? $basMeta['spend'] / $basSales['sales'] : 0.0,
+            'cac' => $basSales['sales'] > 0 ? $basMeta['spend_real'] / $basSales['sales'] : 0.0,
             'cpl' => $basMeta['leads'] > 0 ? $basMeta['spend'] / $basMeta['leads'] : 0.0,
             'roas' => $basMeta['spend'] > 0 ? $basSales['revenue'] / $basMeta['spend'] : 0.0,
             'cpm' => $basMeta['impressions'] > 0 ? ($basMeta['spend'] / $basMeta['impressions']) * 1000 : 0.0,
@@ -1665,12 +1677,13 @@ $GLOBALS['metaHierarchyForPending'] = $metaHierarchy;
 
     $allSalesCards = array('sales'=>0,'revenue'=>0.0,'roas'=>0.0,'cac'=>0.0,'cpm'=>0.0,'cpc'=>0.0,'frequency'=>0.0);
     $metaSpendTotal = (float)($attrCards['spend'] ?? 0);
+    $metaSpendTotalReal = (float)($attrCards['spend_real'] ?? $metaSpendTotal);
     foreach ($generalSalesRows as $row) {
         $allSalesCards['sales']++;
         $allSalesCards['revenue'] += (float)($row['producer_net'] ?? 0);
     }
     $allSalesCards['roas'] = $metaSpendTotal > 0 ? $allSalesCards['revenue'] / $metaSpendTotal : 0.0;
-    $allSalesCards['cac'] = $allSalesCards['sales'] > 0 ? $metaSpendTotal / $allSalesCards['sales'] : 0.0;
+    $allSalesCards['cac'] = $allSalesCards['sales'] > 0 ? $metaSpendTotalReal / $allSalesCards['sales'] : 0.0;
     $allSalesCards['cpm'] = (float)($attrCards['cpm'] ?? 0);
     $allSalesCards['cpc'] = (float)($attrCards['cpc'] ?? 0);
     $allSalesCards['frequency'] = (float)($attrCards['frequency'] ?? 0);
@@ -1791,17 +1804,17 @@ $topNested = sort_nested_groups($topNested, $sort, $dir);
 
 $metaChart = array(
     'labels' => array_map(function ($row) { return $row['report_date']; }, $metaDaily),
-    'spend' => array_map(function ($row) { return round((float)$row['spend'], 2); }, $metaDaily),
+    'spend' => array_map(function ($row) { return round((float)($row['spend_real'] ?? $row['spend']), 2); }, $metaDaily),
     'leads' => array_map(function ($row) { return (int)$row['leads']; }, $metaDaily),
     'cpm' => array_map(function ($row) { return round((float)$row['cpm'], 2); }, $metaDaily),
     'frequency' => array_map(function ($row) { return round((float)$row['frequency'], 2); }, $metaDaily),
 );
 $attrChart = array(
     'labels' => array_map(function ($row) { return $row['label']; }, $attrDaily),
-    'spend' => array_map(function ($row) { return round((float)$row['spend'], 2); }, $attrDaily),
+    'spend' => array_map(function ($row) { return round((float)($row['spend_real'] ?? $row['spend']), 2); }, $attrDaily),
     'sales' => array_map(function ($row) { return (int)$row['sales']; }, $attrDaily),
     'revenue' => array_map(function ($row) { return round((float)$row['revenue'], 2); }, $attrDaily),
-    'cac' => array_map(function ($row) { return $row['sales'] > 0 ? round((float)$row['spend'] / $row['sales'], 2) : 0; }, $attrDaily),
+    'cac' => array_map(function ($row) { return $row['sales'] > 0 ? round((float)($row['spend_real'] ?? $row['spend']) / $row['sales'], 2) : 0; }, $attrDaily),
     'roas' => array_map(function ($row) { return $row['spend'] > 0 ? round((float)$row['revenue'] / $row['spend'], 2) : 0; }, $attrDaily),
     'cpm' => array_map(function ($row) { return $row['cpm_rows'] > 0 ? round((float)$row['cpm_sum'] / $row['cpm_rows'], 2) : 0; }, $attrDaily),
     'frequency' => array_map(function ($row) { return $row['frequency_rows'] > 0 ? round((float)$row['frequency_sum'] / $row['frequency_rows'], 2) : 0; }, $attrDaily),
@@ -2216,7 +2229,7 @@ $attrChart = array(
                             <span class="kpi-label">Gasto Meta Hoje</span>
                             <div class="kpi-icon-box amber"><i data-lucide="dollar-sign" class="w-5 h-5"></i></div>
                         </div>
-                        <div class="kpi-value font-mono">R$ <?= number_format((float)($metaCards['spend'] ?? 0), 2, ',', '.') ?></div>
+                        <div class="kpi-value font-mono">R$ <?= number_format((float)($metaCards['spend_real'] ?? $metaCards['spend'] ?? 0), 2, ',', '.') ?></div>
                     </div>
 
                     <div class="kpi-card">
@@ -2405,7 +2418,7 @@ $attrChart = array(
                 <div class="kpi-grid">
                     <div class="kpi-card">
                         <div class="kpi-header"><span class="kpi-label">Gasto no Período</span><div class="kpi-icon-box amber"><i data-lucide="dollar-sign" class="w-5 h-5"></i></div></div>
-                        <div class="kpi-value font-mono">R$ <?= number_format($attrCards['spend'], 2, ',', '.') ?></div>
+                        <div class="kpi-value font-mono">R$ <?= number_format($attrCards['spend_real'], 2, ',', '.') ?></div>
                     </div>
 
                     <div class="kpi-card">

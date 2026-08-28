@@ -550,34 +550,46 @@ function fetch_live_usd_brl_rate(): ?float
     return $cached;
 }
 
-function apply_integration_currency_conversion(array $row, array $integration): array
+function integration_usd_brl_rate(array $integration): float
 {
     $currency = strtoupper((string)($integration['currency_code'] ?? 'BRL'));
     if ($currency !== 'USD') {
-        return $row;
+        return 0.0;
     }
 
-    $spread = (float)($integration['currency_spread_percent'] ?? 0);
     $rate = (float)($integration['manual_exchange_rate'] ?? 0);
     if ($rate <= 0) {
         $rate = fetch_live_usd_brl_rate() ?? 0;
     }
 
+    return $rate > 0 ? $rate : 0.0;
+}
+
+/**
+ * Aplica a conversao "limpa" (so cotacao, sem spread) sobre os campos
+ * monetarios vindos da Meta antes de gravar nas tabelas de metricas.
+ * Essa e a base usada por CPC, CPM, CPL e ROAS em todo o sistema.
+ * O spread (custo real de cambio) e somado separadamente, direto nas
+ * consultas SQL de Gasto/Investimento/CAC (ver admin/index.php), sem
+ * contaminar as demais metricas de eficiencia.
+ */
+function apply_integration_currency_conversion(array $row, array $integration): array
+{
+    $rate = integration_usd_brl_rate($integration);
     if ($rate <= 0) {
         return $row;
     }
 
-    $factor = $rate * (1 + ($spread / 100));
     foreach (['spend', 'cpc', 'cpm'] as $field) {
         if (isset($row[$field]) && $row[$field] !== '') {
-            $row[$field] = (string)round(((float)$row[$field]) * $factor, 6);
+            $row[$field] = (string)round(((float)$row[$field]) * $rate, 6);
         }
     }
 
     if (!empty($row['actions']) && is_array($row['actions'])) {
         foreach ($row['actions'] as &$action) {
             if (isset($action['value']) && in_array($action['action_type'] ?? '', ['omni_purchase', 'purchase'], true)) {
-                $action['value'] = (string)round(((float)$action['value']) * $factor, 6);
+                $action['value'] = (string)round(((float)$action['value']) * $rate, 6);
             }
         }
         unset($action);
