@@ -531,15 +531,18 @@ function fetch_live_usd_brl_rate(): ?float
     ]);
     $body = curl_exec($ch);
     $errno = curl_errno($ch);
+    $error = curl_error($ch);
     curl_close($ch);
 
     if ($errno !== 0 || !$body) {
+        app_log('Falha ao buscar cotação USD/BRL automática', ['error' => $error ?: 'resposta vazia']);
         return null;
     }
 
     $decoded = json_decode((string) $body, true);
     $bid = $decoded['USDBRL']['bid'] ?? null;
     if ($bid === null || !is_numeric($bid)) {
+        app_log('Resposta inesperada ao buscar cotação USD/BRL automática', ['body' => substr((string) $body, 0, 500)]);
         return null;
     }
 
