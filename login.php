@@ -4,7 +4,7 @@ session_start();
 require_once __DIR__ . '/includes/bootstrap.php';
 
 if (!empty($_SESSION['meta_admin_logged'])) {
-    header('Location: /meta_ads_manager_project/admin/');
+    header('Location: /gestaotrafego/admin/');
     exit;
 }
 
@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['meta_admin_email'] = (string)$user['email'];
             $_SESSION['meta_admin_last_activity'] = time();
 
-            header('Location: /meta_ads_manager_project/admin/');
+            header('Location: /gestaotrafego/admin/');
             exit;
         }
     } catch (Throwable $e) {

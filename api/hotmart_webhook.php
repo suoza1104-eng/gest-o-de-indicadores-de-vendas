@@ -2,7 +2,7 @@
 /**
  * Hotmart webhook receiver for meta ads manager
  * Suggested path:
- *   /public_html/meta_ads_manager_project/api/hotmart_webhook.php
+ *   /public_html/gestaotrafego/api/hotmart_webhook.php
  *
  * Stores raw events and consolidated live sales in prof2543_meta_ads_manager
  * Mirrors/update legacy hotmart_sales in prof2543_area_membros

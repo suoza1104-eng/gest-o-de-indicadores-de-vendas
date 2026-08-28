@@ -4,14 +4,14 @@ session_start();
 $sessionTimeout = 7200; // 2 horas de inatividade
 
 if (empty($_SESSION['meta_admin_logged'])) {
-    header('Location: /meta_ads_manager_project/login.php');
+    header('Location: /gestaotrafego/login.php');
     exit;
 }
 
 if (!empty($_SESSION['meta_admin_last_activity']) && (time() - (int)$_SESSION['meta_admin_last_activity']) > $sessionTimeout) {
     session_unset();
     session_destroy();
-    header('Location: /meta_ads_manager_project/login.php?expired=1');
+    header('Location: /gestaotrafego/login.php?expired=1');
     exit;
 }
 
@@ -2795,4 +2795,3 @@ window.manualAttributionConfig = <?= json_encode(array('model'=>$attributionMode
 <script src="../assets/js/app-pro.js"></script>
 </body>
 </html>
-

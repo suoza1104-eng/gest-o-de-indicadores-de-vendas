@@ -1,7 +1,8 @@
 ---
 deployment:
   tasks:
-    - export DEPLOYPATH=/home1/prof2543/public_html/
+    - export DEPLOYPATH=/home1/prof2543/public_html/gestaotrafego/
+    - /bin/mkdir -p $DEPLOYPATH
     - /bin/cp -R admin $DEPLOYPATH
     - /bin/cp -R api $DEPLOYPATH
     - /bin/cp -R assets $DEPLOYPATH
