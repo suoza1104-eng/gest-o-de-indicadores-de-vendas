@@ -238,18 +238,30 @@ function campaign_matches_selected($campaignValue, array $selectedCampaigns)
     return best_fuzzy_key_match($rawNorm, $candidateMap, 74.0) !== '';
 }
 
-function fetch_meta_real_daily_rows(PDO $pdo, $integrationId, $dateFrom, $dateTo, array $campaignFilters = array(), $adsetFilter = '')
+function integration_brl_exchange_rate_sql(array $integration): string
 {
-    $spreadExpr = "mtd.spend * (1 + (CASE WHEN mi.currency_code = 'USD' THEN mi.currency_spread_percent ELSE 0 END) / 100)";
+    if (strtoupper((string)($integration['currency_code'] ?? 'BRL')) !== 'USD') {
+        return '1.000000';
+    }
+
+    $rate = integration_usd_brl_rate($integration);
+    return sprintf('%.6F', $rate > 0 ? $rate : 1.0);
+}
+
+function fetch_meta_real_daily_rows(PDO $pdo, array $integration, $dateFrom, $dateTo, array $campaignFilters = array(), $adsetFilter = '')
+{
+    $integrationId = (int)($integration['id'] ?? 0);
+    $exchangeRate = integration_brl_exchange_rate_sql($integration);
+    $spendRealExpr = "mtd.spend * $exchangeRate * (1 + (CASE WHEN mi.currency_code = 'USD' THEN mi.currency_spread_percent ELSE 0 END) / 100)";
     if ($adsetFilter !== '') {
-        $sql = "SELECT mtd.report_date, SUM(mtd.spend) AS spend, SUM($spreadExpr) AS spend_real, SUM(mtd.impressions) AS impressions, SUM(mtd.reach) AS reach, AVG(mtd.frequency) AS frequency, SUM(mtd.clicks) AS clicks, CASE WHEN SUM(mtd.clicks) > 0 THEN SUM(mtd.spend) / SUM(mtd.clicks) ELSE 0 END AS cpc, CASE WHEN SUM(mtd.impressions) > 0 THEN (SUM(mtd.spend) / SUM(mtd.impressions)) * 1000 ELSE 0 END AS cpm FROM meta_adset_daily mtd JOIN meta_integrations mi ON mi.id = mtd.integration_id WHERE mtd.integration_id = :integration_id AND mtd.report_date BETWEEN :date_from AND :date_to AND mtd.adset_name = :adset_name";
+        $sql = "SELECT mtd.report_date, SUM(mtd.spend) AS spend, SUM($spendRealExpr) AS spend_real, SUM(mtd.impressions) AS impressions, SUM(mtd.reach) AS reach, AVG(mtd.frequency) AS frequency, SUM(mtd.clicks) AS clicks, CASE WHEN SUM(mtd.clicks) > 0 THEN SUM($spendRealExpr) / SUM(mtd.clicks) ELSE 0 END AS cpc, CASE WHEN SUM(mtd.impressions) > 0 THEN (SUM($spendRealExpr) / SUM(mtd.impressions)) * 1000 ELSE 0 END AS cpm FROM meta_adset_daily mtd JOIN meta_integrations mi ON mi.id = mtd.integration_id WHERE mtd.integration_id = :integration_id AND mtd.report_date BETWEEN :date_from AND :date_to AND mtd.adset_name = :adset_name";
         $params = array(':integration_id' => $integrationId, ':date_from' => $dateFrom, ':date_to' => $dateTo, ':adset_name' => $adsetFilter);
         if ($campaignFilters) {
             $sql .= build_in_condition($campaignFilters, 'campaign', $params, 'mtd.campaign_name');
         }
         $sql .= ' GROUP BY mtd.report_date ORDER BY mtd.report_date';
     } else {
-        $sql = "SELECT mtd.report_date, SUM(mtd.spend) AS spend, SUM($spreadExpr) AS spend_real, SUM(mtd.impressions) AS impressions, SUM(mtd.reach) AS reach, AVG(mtd.frequency) AS frequency, SUM(mtd.clicks) AS clicks, CASE WHEN SUM(mtd.clicks) > 0 THEN SUM(mtd.spend) / SUM(mtd.clicks) ELSE 0 END AS cpc, CASE WHEN SUM(mtd.impressions) > 0 THEN (SUM(mtd.spend) / SUM(mtd.impressions)) * 1000 ELSE 0 END AS cpm FROM meta_campaign_daily mtd JOIN meta_integrations mi ON mi.id = mtd.integration_id WHERE mtd.integration_id = :integration_id AND mtd.report_date BETWEEN :date_from AND :date_to";
+        $sql = "SELECT mtd.report_date, SUM(mtd.spend) AS spend, SUM($spendRealExpr) AS spend_real, SUM(mtd.impressions) AS impressions, SUM(mtd.reach) AS reach, AVG(mtd.frequency) AS frequency, SUM(mtd.clicks) AS clicks, CASE WHEN SUM(mtd.clicks) > 0 THEN SUM($spendRealExpr) / SUM(mtd.clicks) ELSE 0 END AS cpc, CASE WHEN SUM(mtd.impressions) > 0 THEN (SUM($spendRealExpr) / SUM(mtd.impressions)) * 1000 ELSE 0 END AS cpm FROM meta_campaign_daily mtd JOIN meta_integrations mi ON mi.id = mtd.integration_id WHERE mtd.integration_id = :integration_id AND mtd.report_date BETWEEN :date_from AND :date_to";
         $params = array(':integration_id' => $integrationId, ':date_from' => $dateFrom, ':date_to' => $dateTo);
         if ($campaignFilters) {
             $sql .= build_in_condition($campaignFilters, 'campaign', $params, 'mtd.campaign_name');
@@ -772,11 +784,14 @@ $productOptions = array();
 $topNested = array();
 
 if ($integration) {
-    $stmt = $pdo->prepare('SELECT COALESCE(SUM(mcd.spend),0) AS spend, COALESCE(SUM(mcd.spend * (1 + (CASE WHEN mi.currency_code = \'USD\' THEN mi.currency_spread_percent ELSE 0 END) / 100)),0) AS spend_real, COALESCE(SUM(mcd.impressions),0) AS impressions, COALESCE(SUM(mcd.clicks),0) AS clicks, COALESCE(SUM(mcd.leads),0) AS leads, COALESCE(AVG(mcd.cpm),0) AS cpm, COALESCE(AVG(mcd.frequency),0) AS frequency FROM meta_campaign_daily mcd JOIN meta_integrations mi ON mi.id = mcd.integration_id WHERE mcd.integration_id = :integration_id AND mcd.report_date = :report_date');
+    $exchangeRate = integration_brl_exchange_rate_sql($integration);
+    $spendRealExpr = "mcd.spend * $exchangeRate * (1 + (CASE WHEN mi.currency_code = 'USD' THEN mi.currency_spread_percent ELSE 0 END) / 100)";
+
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(mcd.spend),0) AS spend, COALESCE(SUM($spendRealExpr),0) AS spend_real, COALESCE(SUM(mcd.impressions),0) AS impressions, COALESCE(SUM(mcd.clicks),0) AS clicks, COALESCE(SUM(mcd.leads),0) AS leads, CASE WHEN SUM(mcd.impressions) > 0 THEN (SUM($spendRealExpr) / SUM(mcd.impressions)) * 1000 ELSE 0 END AS cpm, COALESCE(AVG(mcd.frequency),0) AS frequency FROM meta_campaign_daily mcd JOIN meta_integrations mi ON mi.id = mcd.integration_id WHERE mcd.integration_id = :integration_id AND mcd.report_date = :report_date");
     $stmt->execute(array('integration_id' => (int)$integration['id'], 'report_date' => $today));
     $metaCards = $stmt->fetch() ?: $metaCards;
 
-    $stmt = $pdo->prepare('SELECT mcd.report_date, SUM(mcd.spend) AS spend, SUM(mcd.spend * (1 + (CASE WHEN mi.currency_code = \'USD\' THEN mi.currency_spread_percent ELSE 0 END) / 100)) AS spend_real, SUM(mcd.leads) AS leads, AVG(mcd.cpm) AS cpm, AVG(mcd.frequency) AS frequency FROM meta_campaign_daily mcd JOIN meta_integrations mi ON mi.id = mcd.integration_id WHERE mcd.integration_id = :integration_id AND mcd.report_date BETWEEN :start AND :end GROUP BY mcd.report_date ORDER BY mcd.report_date ASC');
+    $stmt = $pdo->prepare("SELECT mcd.report_date, SUM(mcd.spend) AS spend, SUM($spendRealExpr) AS spend_real, SUM(mcd.leads) AS leads, CASE WHEN SUM(mcd.impressions) > 0 THEN (SUM($spendRealExpr) / SUM(mcd.impressions)) * 1000 ELSE 0 END AS cpm, AVG(mcd.frequency) AS frequency FROM meta_campaign_daily mcd JOIN meta_integrations mi ON mi.id = mcd.integration_id WHERE mcd.integration_id = :integration_id AND mcd.report_date BETWEEN :start AND :end GROUP BY mcd.report_date ORDER BY mcd.report_date ASC");
     $stmt->execute(array('integration_id' => (int)$integration['id'], 'start' => date('Y-m-d', strtotime('-29 days')), 'end' => $today));
     $metaDaily = $stmt->fetchAll();
 
@@ -810,7 +825,7 @@ if ($integration) {
     $salesWhere = ' WHERE attribution_model = :model AND sale_date BETWEEN :start_dt AND :end_dt';
     $salesParams = array('model' => $attributionModel, 'start_dt' => $rangeStart . ' 00:00:00', 'end_dt' => $rangeEnd . ' 23:59:59');
 
-    $metaAggRows = fetch_meta_real_daily_rows($pdo, (int)$integration['id'], $rangeStart, $rangeEnd, $campaignFilters, $adsetFilter);
+    $metaAggRows = fetch_meta_real_daily_rows($pdo, $integration, $rangeStart, $rangeEnd, $campaignFilters, $adsetFilter);
     $leadAggRows = fetch_attr_lead_daily_rows($pdo, $rangeStart, $rangeEnd, $campaignFilters, $adsetFilter);
     $salesAggRows = fetch_attr_sales_daily_rows($pdo, $attributionModel, $rangeStart, $rangeEnd, $campaignFilters, $adsetFilter, $productFilter);
 
@@ -834,7 +849,7 @@ if ($integration) {
     $attrCards['cpl'] = $attrCards['leads'] > 0 ? $attrCards['spend_real'] / $attrCards['leads'] : 0;
     $attrCards['cac'] = $attrCards['sales'] > 0 ? $attrCards['spend_real'] / $attrCards['sales'] : 0;
     $attrCards['cpa'] = $attrCards['cac'];
-    $attrCards['roas'] = $attrCards['spend'] > 0 ? $attrCards['revenue'] / $attrCards['spend'] : 0;
+    $attrCards['roas'] = $attrCards['spend_real'] > 0 ? $attrCards['revenue'] / $attrCards['spend_real'] : 0;
 
     $periods = array(
         array('label' => $periodA . 'd vs ' . $periodB . 'd', 'a' => $periodA, 'b' => $periodB),
@@ -845,20 +860,21 @@ if ($integration) {
         $baseStart = date('Y-m-d', strtotime($rangeEnd . ' -' . ($period['b'] - 1) . ' days'));
         $baseEnd = date('Y-m-d', strtotime($rangeEnd . ' -' . $period['a'] . ' days'));
 
-        $curMeta = fetch_meta_real_daily_rows($pdo, (int)$integration['id'], $currStart, $rangeEnd, $campaignFilters, $adsetFilter);
+        $curMeta = fetch_meta_real_daily_rows($pdo, $integration, $currStart, $rangeEnd, $campaignFilters, $adsetFilter);
         $curLeads = fetch_attr_lead_daily_rows($pdo, $currStart, $rangeEnd, $campaignFilters, $adsetFilter);
         $curSalesRows = fetch_attr_sales_daily_rows($pdo, $attributionModel, $currStart, $rangeEnd, $campaignFilters, $adsetFilter, $productFilter);
         $curDaily = merge_real_buckets($curMeta, $curLeads, $curSalesRows, 'day');
 
-        $basMeta = fetch_meta_real_daily_rows($pdo, (int)$integration['id'], $baseStart, $baseEnd, $campaignFilters, $adsetFilter);
+        $basMeta = fetch_meta_real_daily_rows($pdo, $integration, $baseStart, $baseEnd, $campaignFilters, $adsetFilter);
         $basLeads = fetch_attr_lead_daily_rows($pdo, $baseStart, $baseEnd, $campaignFilters, $adsetFilter);
         $basSalesRows = fetch_attr_sales_daily_rows($pdo, $attributionModel, $baseStart, $baseEnd, $campaignFilters, $adsetFilter, $productFilter);
         $basDaily = merge_real_buckets($basMeta, $basLeads, $basSalesRows, 'day');
 
         $calcSummary = function(array $rows) {
-            $summary = array('spend'=>0.0,'leads'=>0,'sales'=>0,'revenue'=>0.0,'cpm'=>0.0,'frequency'=>0.0,'cpc'=>0.0,'count'=>0);
+            $summary = array('spend'=>0.0,'spend_real'=>0.0,'leads'=>0,'sales'=>0,'revenue'=>0.0,'cpm'=>0.0,'frequency'=>0.0,'cpc'=>0.0,'count'=>0);
             foreach ($rows as $row) {
                 $summary['spend'] += (float)$row['spend'];
+                $summary['spend_real'] += (float)($row['spend_real'] ?? $row['spend']);
                 $summary['leads'] += (int)$row['leads'];
                 $summary['sales'] += (int)$row['sales'];
                 $summary['revenue'] += (float)$row['revenue'];
@@ -869,9 +885,9 @@ if ($integration) {
                     $summary['count']++;
                 }
             }
-            $summary['cac'] = $summary['sales'] > 0 ? $summary['spend'] / $summary['sales'] : 0.0;
-            $summary['cpl'] = $summary['leads'] > 0 ? $summary['spend'] / $summary['leads'] : 0.0;
-            $summary['roas'] = $summary['spend'] > 0 ? $summary['revenue'] / $summary['spend'] : 0.0;
+            $summary['cac'] = $summary['sales'] > 0 ? $summary['spend_real'] / $summary['sales'] : 0.0;
+            $summary['cpl'] = $summary['leads'] > 0 ? $summary['spend_real'] / $summary['leads'] : 0.0;
+            $summary['roas'] = $summary['spend_real'] > 0 ? $summary['revenue'] / $summary['spend_real'] : 0.0;
             $summary['cpm'] = $summary['count'] > 0 ? $summary['cpm'] / $summary['count'] : 0.0;
             $summary['frequency'] = $summary['count'] > 0 ? $summary['frequency'] / $summary['count'] : 0.0;
             $summary['cpc'] = $summary['count'] > 0 ? $summary['cpc'] / $summary['count'] : 0.0;
@@ -1317,7 +1333,7 @@ $attrChart = array(
     'sales' => array_map(function ($row) { return (int)$row['sales']; }, $attrDaily),
     'revenue' => array_map(function ($row) { return round((float)$row['revenue'], 2); }, $attrDaily),
     'cac' => array_map(function ($row) { return $row['sales'] > 0 ? round((float)($row['spend_real'] ?? $row['spend']) / $row['sales'], 2) : 0; }, $attrDaily),
-    'roas' => array_map(function ($row) { return $row['spend'] > 0 ? round((float)$row['revenue'] / $row['spend'], 2) : 0; }, $attrDaily),
+    'roas' => array_map(function ($row) { $spendReal = (float)($row['spend_real'] ?? $row['spend']); return $spendReal > 0 ? round((float)$row['revenue'] / $spendReal, 2) : 0; }, $attrDaily),
     'cpm' => array_map(function ($row) { return $row['cpm_rows'] > 0 ? round((float)$row['cpm_sum'] / $row['cpm_rows'], 2) : 0; }, $attrDaily),
     'frequency' => array_map(function ($row) { return $row['frequency_rows'] > 0 ? round((float)$row['frequency_sum'] / $row['frequency_rows'], 2) : 0; }, $attrDaily),
     'cpc' => array_map(function ($row) { return $row['cpc_rows'] > 0 ? round((float)$row['cpc_sum'] / $row['cpc_rows'], 2) : 0; }, $attrDaily),

@@ -316,7 +316,7 @@ function integration_filter_sql($integrationIds): string
 
 function fetch_meta_real_daily_rows(PDO $pdo, $integrationIds, $dateFrom, $dateTo, array $campaignFilters = array(), $adsetFilter = '')
 {
-    $spreadExpr = "mtd.spend * (1 + (CASE WHEN mi.currency_code = 'USD' THEN mi.currency_spread_percent ELSE 0 END) / 100)";
+    $spreadExpr = "mtd.spend * (CASE WHEN mi.currency_code = 'USD' THEN COALESCE(NULLIF(mi.manual_exchange_rate, 0), 1) ELSE 1 END) * (1 + (CASE WHEN mi.currency_code = 'USD' THEN mi.currency_spread_percent ELSE 0 END) / 100)";
     if ($adsetFilter !== '') {
         $sql = "SELECT mtd.report_date, SUM(mtd.spend) AS spend, SUM($spreadExpr) AS spend_real, SUM(mtd.impressions) AS impressions, SUM(mtd.reach) AS reach, AVG(mtd.frequency) AS frequency, SUM(mtd.clicks) AS clicks, CASE WHEN SUM(mtd.clicks) > 0 THEN SUM(mtd.spend) / SUM(mtd.clicks) ELSE 0 END AS cpc, CASE WHEN SUM(mtd.impressions) > 0 THEN (SUM(mtd.spend) / SUM(mtd.impressions)) * 1000 ELSE 0 END AS cpm FROM meta_adset_daily mtd JOIN meta_integrations mi ON mi.id = mtd.integration_id WHERE " . integration_filter_sql($integrationIds) . " AND mtd.report_date BETWEEN :date_from AND :date_to AND mtd.adset_name = :adset_name";
         $params = array(':date_from' => $dateFrom, ':date_to' => $dateTo, ':adset_name' => $adsetFilter);
@@ -649,7 +649,7 @@ function fetch_total_sales_summary(PDO $pdo, $start, $end, $productFilter = '')
 function fetch_meta_period_summary(PDO $pdo, $integrationIds, $start, $end)
 {
     $stmt = $pdo->prepare("SELECT COALESCE(SUM(mad.spend),0) AS spend,
-                                  COALESCE(SUM(mad.spend * (1 + (CASE WHEN mi.currency_code = 'USD' THEN mi.currency_spread_percent ELSE 0 END) / 100)),0) AS spend_real,
+                                  COALESCE(SUM(mad.spend * (CASE WHEN mi.currency_code = 'USD' THEN COALESCE(NULLIF(mi.manual_exchange_rate, 0), 1) ELSE 1 END) * (1 + (CASE WHEN mi.currency_code = 'USD' THEN mi.currency_spread_percent ELSE 0 END) / 100)),0) AS spend_real,
                                   COALESCE(SUM(mad.impressions),0) AS impressions,
                                   COALESCE(SUM(mad.reach),0) AS reach,
                                   COALESCE(SUM(mad.clicks),0) AS clicks,
@@ -1231,11 +1231,11 @@ $metaHierarchy = array();
 if ($integrationIds) {
     ensure_manual_attribution_table($pdo);
     $metaHierarchy = fetch_meta_hierarchy($pdo, $integrationIds);
-    $stmt = $pdo->prepare('SELECT COALESCE(SUM(mcd.spend),0) AS spend, COALESCE(SUM(mcd.spend * (1 + (CASE WHEN mi.currency_code = \'USD\' THEN mi.currency_spread_percent ELSE 0 END) / 100)),0) AS spend_real, COALESCE(SUM(mcd.impressions),0) AS impressions, COALESCE(SUM(mcd.clicks),0) AS clicks, COALESCE(SUM(mcd.leads),0) AS leads, CASE WHEN SUM(mcd.impressions) > 0 THEN (SUM(mcd.spend) / SUM(mcd.impressions)) * 1000 ELSE 0 END AS cpm, CASE WHEN SUM(mcd.reach) > 0 THEN SUM(mcd.impressions) / SUM(mcd.reach) ELSE 0 END AS frequency FROM meta_campaign_daily mcd JOIN meta_integrations mi ON mi.id = mcd.integration_id WHERE mcd.integration_id IN (' . $integrationIdSql . ') AND mcd.report_date = :report_date');
+    $stmt = $pdo->prepare('SELECT COALESCE(SUM(mcd.spend),0) AS spend, COALESCE(SUM(mcd.spend * (CASE WHEN mi.currency_code = \'USD\' THEN COALESCE(NULLIF(mi.manual_exchange_rate, 0), 1) ELSE 1 END) * (1 + (CASE WHEN mi.currency_code = \'USD\' THEN mi.currency_spread_percent ELSE 0 END) / 100)),0) AS spend_real, COALESCE(SUM(mcd.impressions),0) AS impressions, COALESCE(SUM(mcd.clicks),0) AS clicks, COALESCE(SUM(mcd.leads),0) AS leads, CASE WHEN SUM(mcd.impressions) > 0 THEN (SUM(mcd.spend) / SUM(mcd.impressions)) * 1000 ELSE 0 END AS cpm, CASE WHEN SUM(mcd.reach) > 0 THEN SUM(mcd.impressions) / SUM(mcd.reach) ELSE 0 END AS frequency FROM meta_campaign_daily mcd JOIN meta_integrations mi ON mi.id = mcd.integration_id WHERE mcd.integration_id IN (' . $integrationIdSql . ') AND mcd.report_date = :report_date');
     $stmt->execute(array('report_date' => $today));
     $metaCards = $stmt->fetch() ?: $metaCards;
 
-    $stmt = $pdo->prepare('SELECT mcd.report_date, SUM(mcd.spend) AS spend, SUM(mcd.spend * (1 + (CASE WHEN mi.currency_code = \'USD\' THEN mi.currency_spread_percent ELSE 0 END) / 100)) AS spend_real, SUM(mcd.leads) AS leads, CASE WHEN SUM(mcd.impressions) > 0 THEN (SUM(mcd.spend) / SUM(mcd.impressions)) * 1000 ELSE 0 END AS cpm, CASE WHEN SUM(mcd.reach) > 0 THEN SUM(mcd.impressions) / SUM(mcd.reach) ELSE 0 END AS frequency FROM meta_campaign_daily mcd JOIN meta_integrations mi ON mi.id = mcd.integration_id WHERE mcd.integration_id IN (' . $integrationIdSql . ') AND mcd.report_date BETWEEN :start AND :end GROUP BY mcd.report_date ORDER BY mcd.report_date ASC');
+    $stmt = $pdo->prepare('SELECT mcd.report_date, SUM(mcd.spend) AS spend, SUM(mcd.spend * (CASE WHEN mi.currency_code = \'USD\' THEN COALESCE(NULLIF(mi.manual_exchange_rate, 0), 1) ELSE 1 END) * (1 + (CASE WHEN mi.currency_code = \'USD\' THEN mi.currency_spread_percent ELSE 0 END) / 100)) AS spend_real, SUM(mcd.leads) AS leads, CASE WHEN SUM(mcd.impressions) > 0 THEN (SUM(mcd.spend) / SUM(mcd.impressions)) * 1000 ELSE 0 END AS cpm, CASE WHEN SUM(mcd.reach) > 0 THEN SUM(mcd.impressions) / SUM(mcd.reach) ELSE 0 END AS frequency FROM meta_campaign_daily mcd JOIN meta_integrations mi ON mi.id = mcd.integration_id WHERE mcd.integration_id IN (' . $integrationIdSql . ') AND mcd.report_date BETWEEN :start AND :end GROUP BY mcd.report_date ORDER BY mcd.report_date ASC');
     $stmt->execute(array('start' => date('Y-m-d', strtotime('-29 days')), 'end' => $today));
     $metaDaily = $stmt->fetchAll();
 

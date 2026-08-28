@@ -26,6 +26,9 @@ try {
     $currencySpreadPercent = max(0, (float) str_replace(',', '.', (string) post('currency_spread_percent', 0)));
     $manualExchangeRate = trim((string) post('manual_exchange_rate', ''));
     $manualExchangeRate = $manualExchangeRate === '' ? null : max(0, (float) str_replace(',', '.', $manualExchangeRate));
+    if ($currencyCode === 'USD' && ($manualExchangeRate === null || $manualExchangeRate <= 0)) {
+        $manualExchangeRate = fetch_live_usd_brl_rate();
+    }
 
     if ($name === '' || $adAccountId === '') {
         json_response(['ok' => false, 'message' => 'Nome e Ad Account ID são obrigatórios.'], 422);

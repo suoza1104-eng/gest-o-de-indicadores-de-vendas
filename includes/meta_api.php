@@ -565,36 +565,10 @@ function integration_usd_brl_rate(array $integration): float
     return $rate > 0 ? $rate : 0.0;
 }
 
-/**
- * Aplica a conversao "limpa" (so cotacao, sem spread) sobre os campos
- * monetarios vindos da Meta antes de gravar nas tabelas de metricas.
- * Essa e a base usada por CPC, CPM, CPL e ROAS em todo o sistema.
- * O spread (custo real de cambio) e somado separadamente, direto nas
- * consultas SQL de Gasto/Investimento/CAC (ver admin/index.php), sem
- * contaminar as demais metricas de eficiencia.
- */
 function apply_integration_currency_conversion(array $row, array $integration): array
 {
-    $rate = integration_usd_brl_rate($integration);
-    if ($rate <= 0) {
-        return $row;
-    }
-
-    foreach (['spend', 'cpc', 'cpm'] as $field) {
-        if (isset($row[$field]) && $row[$field] !== '') {
-            $row[$field] = (string)round(((float)$row[$field]) * $rate, 6);
-        }
-    }
-
-    if (!empty($row['actions']) && is_array($row['actions'])) {
-        foreach ($row['actions'] as &$action) {
-            if (isset($action['value']) && in_array($action['action_type'] ?? '', ['omni_purchase', 'purchase'], true)) {
-                $action['value'] = (string)round(((float)$action['value']) * $rate, 6);
-            }
-        }
-        unset($action);
-    }
-
+    // Valores da Meta ficam na moeda original da conta; a conversao para BRL
+    // e aplicada nas consultas do dashboard com a cotacao atual da integracao.
     return $row;
 }
 
