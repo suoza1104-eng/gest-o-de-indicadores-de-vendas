@@ -34,7 +34,17 @@
       });
     });
 
-    showSection('dashboard');
+    var initialSection = 'dashboard';
+    var params = new URLSearchParams(window.location.search || '');
+    if (window.location.hash === '#cron-audit') {
+      initialSection = 'audit';
+    }
+    params.forEach(function (_value, key) {
+      if (key.indexOf('audit_') === 0) {
+        initialSection = 'audit';
+      }
+    });
+    showSection(initialSection);
   }
 
   setupNavigation();
