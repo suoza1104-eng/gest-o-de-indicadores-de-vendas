@@ -744,8 +744,56 @@ function sort_link($params, $field, $label, $currentSort, $currentDir)
     return '<a class="sort-link" href="?' . h(http_build_query($params)) . '">' . h($label . $arrow) . '</a>';
 }
 
+function normalize_date_param($value, $fallback)
+{
+    $value = trim((string)$value);
+    return preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) ? $value : $fallback;
+}
+
+function status_badge_class($status)
+{
+    $status = strtolower((string)$status);
+    if (in_array($status, array('success', 'completed'), true)) {
+        return 'badge-emerald';
+    }
+    if ($status === 'running') {
+        return 'badge-indigo';
+    }
+    if ($status === 'skipped') {
+        return 'badge-amber';
+    }
+    return 'badge-rose';
+}
+
+function format_run_duration($startedAt, $finishedAt)
+{
+    if (!$startedAt || !$finishedAt) {
+        return '-';
+    }
+    $start = strtotime((string)$startedAt);
+    $end = strtotime((string)$finishedAt);
+    if ($start === false || $end === false || $end < $start) {
+        return '-';
+    }
+    $seconds = $end - $start;
+    return $seconds < 60 ? $seconds . 's' : floor($seconds / 60) . 'm ' . ($seconds % 60) . 's';
+}
+
+function tail_file_lines($file, $limit = 60)
+{
+    if (!$file || !is_readable($file)) {
+        return array();
+    }
+    $lines = file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if (!is_array($lines)) {
+        return array();
+    }
+    return array_slice($lines, -1 * max(1, (int)$limit));
+}
+
 $pdo = db();
-$integration = $pdo->query('SELECT * FROM meta_integrations ORDER BY id DESC LIMIT 1')->fetch();
+$integrations = $pdo->query('SELECT * FROM meta_integrations ORDER BY id DESC')->fetchAll();
+$integration = $integrations ? $integrations[0] : null;
 
 $today = date('Y-m-d');
 $periodA = max(1, (int)($_GET['period_a'] ?? 7));
@@ -769,6 +817,26 @@ $allowedSort = array('spend','leads','sales','revenue','cac','roas','cpl');
 if (!in_array($sort, $allowedSort, true)) { $sort = 'revenue'; }
 $queryParams = $_GET;
 
+$auditStart = normalize_date_param($_GET['audit_start'] ?? '', date('Y-m-d', strtotime('-7 days')));
+$auditEnd = normalize_date_param($_GET['audit_end'] ?? '', $today);
+if (strtotime($auditStart) > strtotime($auditEnd)) {
+    $tmp = $auditStart;
+    $auditStart = $auditEnd;
+    $auditEnd = $tmp;
+}
+$auditIntegrationId = max(0, (int)($_GET['audit_integration_id'] ?? 0));
+$auditMetaStatus = trim((string)($_GET['audit_meta_status'] ?? ''));
+$auditMetaScope = trim((string)($_GET['audit_meta_scope'] ?? ''));
+$auditAttrStatus = trim((string)($_GET['audit_attr_status'] ?? ''));
+$auditAttrType = trim((string)($_GET['audit_attr_type'] ?? ''));
+$validRunStatuses = array('', 'running', 'success', 'error');
+$validMetaScopes = array('', 'account', 'campaign', 'adset', 'ad');
+$validAttrTypes = array('', 'import', 'match', 'daily');
+if (!in_array($auditMetaStatus, $validRunStatuses, true)) { $auditMetaStatus = ''; }
+if (!in_array($auditAttrStatus, $validRunStatuses, true)) { $auditAttrStatus = ''; }
+if (!in_array($auditMetaScope, $validMetaScopes, true)) { $auditMetaScope = ''; }
+if (!in_array($auditAttrType, $validAttrTypes, true)) { $auditAttrType = ''; }
+
 $metaCards = array('spend'=>0.0,'spend_real'=>0.0,'impressions'=>0,'clicks'=>0,'leads'=>0,'cpm'=>0.0,'frequency'=>0.0);
 $metaDaily = array();
 $metaCampaignRows = array();
@@ -782,6 +850,12 @@ $campaignOptions = array();
 $adsetOptions = array();
 $productOptions = array();
 $topNested = array();
+$auditMetaRows = array();
+$auditAttrRows = array();
+$auditIntegrationRows = array();
+$auditAppLogLines = array();
+$auditMetaSummary = array('total'=>0,'success'=>0,'running'=>0,'error'=>0,'rows'=>0);
+$auditAttrSummary = array('total'=>0,'success'=>0,'running'=>0,'error'=>0);
 
 if ($integration) {
     $exchangeRate = integration_brl_exchange_rate_sql($integration);
@@ -1320,6 +1394,66 @@ if ($integration) {
 $topNested = sort_nested_groups($topNested, $sort, $dir);
 }
 
+if ($integrations) {
+    $auditIntegrationRows = $integrations;
+}
+
+if (table_exists($pdo, 'meta_sync_runs')) {
+    $metaWhere = array('msr.started_at BETWEEN :audit_start AND :audit_end');
+    $metaParams = array(
+        ':audit_start' => $auditStart . ' 00:00:00',
+        ':audit_end' => $auditEnd . ' 23:59:59',
+    );
+    if ($auditIntegrationId > 0) {
+        $metaWhere[] = 'msr.integration_id = :audit_integration_id';
+        $metaParams[':audit_integration_id'] = $auditIntegrationId;
+    }
+    if ($auditMetaStatus !== '') {
+        $metaWhere[] = 'msr.status = :audit_meta_status';
+        $metaParams[':audit_meta_status'] = $auditMetaStatus;
+    }
+    if ($auditMetaScope !== '') {
+        $metaWhere[] = 'msr.scope = :audit_meta_scope';
+        $metaParams[':audit_meta_scope'] = $auditMetaScope;
+    }
+    $metaWhereSql = implode(' AND ', $metaWhere);
+
+    $stmt = $pdo->prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN msr.status = 'success' THEN 1 ELSE 0 END) AS success, SUM(CASE WHEN msr.status = 'running' THEN 1 ELSE 0 END) AS running, SUM(CASE WHEN msr.status = 'error' THEN 1 ELSE 0 END) AS error, COALESCE(SUM(msr.rows_upserted),0) AS rows FROM meta_sync_runs msr WHERE $metaWhereSql");
+    $stmt->execute($metaParams);
+    $auditMetaSummary = array_merge($auditMetaSummary, array_map('intval', $stmt->fetch() ?: array()));
+
+    $stmt = $pdo->prepare("SELECT msr.*, mi.name AS integration_name, mi.ad_account_id, mi.last_error_at, mi.last_error_message FROM meta_sync_runs msr LEFT JOIN meta_integrations mi ON mi.id = msr.integration_id WHERE $metaWhereSql ORDER BY msr.id DESC LIMIT 100");
+    $stmt->execute($metaParams);
+    $auditMetaRows = $stmt->fetchAll();
+}
+
+if (table_exists($pdo, 'attribution_runs')) {
+    $attrWhere = array('started_at BETWEEN :audit_start AND :audit_end');
+    $attrParams = array(
+        ':audit_start' => $auditStart . ' 00:00:00',
+        ':audit_end' => $auditEnd . ' 23:59:59',
+    );
+    if ($auditAttrStatus !== '') {
+        $attrWhere[] = 'status = :audit_attr_status';
+        $attrParams[':audit_attr_status'] = $auditAttrStatus;
+    }
+    if ($auditAttrType !== '') {
+        $attrWhere[] = 'run_type = :audit_attr_type';
+        $attrParams[':audit_attr_type'] = $auditAttrType;
+    }
+    $attrWhereSql = implode(' AND ', $attrWhere);
+
+    $stmt = $pdo->prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success, SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS running, SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS error FROM attribution_runs WHERE $attrWhereSql");
+    $stmt->execute($attrParams);
+    $auditAttrSummary = array_merge($auditAttrSummary, array_map('intval', $stmt->fetch() ?: array()));
+
+    $stmt = $pdo->prepare("SELECT * FROM attribution_runs WHERE $attrWhereSql ORDER BY id DESC LIMIT 100");
+    $stmt->execute($attrParams);
+    $auditAttrRows = $stmt->fetchAll();
+}
+
+$auditAppLogLines = array_reverse(tail_file_lines(app_config('paths', 'log_file'), 80));
+
 $metaChart = array(
     'labels' => array_map(function ($row) { return $row['report_date']; }, $metaDaily),
     'spend' => array_map(function ($row) { return round((float)($row['spend_real'] ?? $row['spend']), 2); }, $metaDaily),
@@ -1443,6 +1577,12 @@ $attrChart = array(
                 </div>
                 <span class="sidebar-label">Configurações API</span>
             </button>
+            <a href="#cron-audit" class="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-medium text-sm text-slate-300 hover:bg-white/5 transition-all text-left group">
+                <div class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-400 group-hover:bg-indigo-600/20 group-hover:text-indigo-400 transition-colors">
+                    <i data-lucide="clipboard-list" class="w-4 h-4"></i>
+                </div>
+                <span class="sidebar-label">Auditoria Cron</span>
+            </a>
         </nav>
 
         <div class="p-4 border-t border-white/10 sidebar-footer-info">
@@ -1987,6 +2127,204 @@ $attrChart = array(
                     <div class="bg-slate-900/60 p-4 rounded-xl border border-white/5"><div class="h-64"><canvas id="attrEfficiencyChart"></canvas></div></div>
                 </div>
             </section>
+
+            <!-- SECTION 10: AUDITORIA DO CRON E SINCRONIZACOES -->
+            <section id="cron-audit" class="glass-card space-y-5">
+                <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 pb-4 border-b border-white/10">
+                    <div class="flex items-start gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-600/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                            <i data-lucide="clipboard-list" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-xl font-bold text-white">Auditoria do Cron e Integrações</h2>
+                            <p class="text-xs text-slate-400 mt-1">Execuções automáticas, erros da Meta, linhas processadas e histórico técnico do sistema.</p>
+                        </div>
+                    </div>
+                    <div class="text-xs text-slate-400 lg:text-right">
+                        <p>Comando cron esperado</p>
+                        <p class="font-mono text-slate-200 break-all">/usr/local/bin/php /home1/prof2543/public_html/gestaotrafego/cron/sync.php</p>
+                    </div>
+                </div>
+
+                <form method="get" action="#cron-audit" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4">
+                    <div class="form-group lg:col-span-2">
+                        <label class="form-label">BM / Conta Meta</label>
+                        <select name="audit_integration_id" class="pro-select">
+                            <option value="0">Todas as BMs</option>
+                            <?php foreach ($integrations as $item): ?>
+                                <option value="<?= (int)$item['id'] ?>" <?= $auditIntegrationId === (int)$item['id'] ? 'selected' : '' ?>><?= h((string)($item['name'] ?? ('BM #' . (int)$item['id']))) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Status Meta</label>
+                        <select name="audit_meta_status" class="pro-select">
+                            <option value="">Todos</option>
+                            <option value="success" <?= $auditMetaStatus === 'success' ? 'selected' : '' ?>>Sucesso</option>
+                            <option value="error" <?= $auditMetaStatus === 'error' ? 'selected' : '' ?>>Erro</option>
+                            <option value="running" <?= $auditMetaStatus === 'running' ? 'selected' : '' ?>>Rodando</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Escopo Meta</label>
+                        <select name="audit_meta_scope" class="pro-select">
+                            <option value="">Todos</option>
+                            <option value="account" <?= $auditMetaScope === 'account' ? 'selected' : '' ?>>Conta</option>
+                            <option value="campaign" <?= $auditMetaScope === 'campaign' ? 'selected' : '' ?>>Campanha</option>
+                            <option value="adset" <?= $auditMetaScope === 'adset' ? 'selected' : '' ?>>Conjunto</option>
+                            <option value="ad" <?= $auditMetaScope === 'ad' ? 'selected' : '' ?>>Anúncio</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Tipo Atribuição</label>
+                        <select name="audit_attr_type" class="pro-select">
+                            <option value="">Todos</option>
+                            <option value="import" <?= $auditAttrType === 'import' ? 'selected' : '' ?>>Importação</option>
+                            <option value="match" <?= $auditAttrType === 'match' ? 'selected' : '' ?>>Matching</option>
+                            <option value="daily" <?= $auditAttrType === 'daily' ? 'selected' : '' ?>>Consolidação</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Status Atribuição</label>
+                        <select name="audit_attr_status" class="pro-select">
+                            <option value="">Todos</option>
+                            <option value="success" <?= $auditAttrStatus === 'success' ? 'selected' : '' ?>>Sucesso</option>
+                            <option value="error" <?= $auditAttrStatus === 'error' ? 'selected' : '' ?>>Erro</option>
+                            <option value="running" <?= $auditAttrStatus === 'running' ? 'selected' : '' ?>>Rodando</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Data Inicial</label>
+                        <input type="date" name="audit_start" value="<?= h($auditStart) ?>" class="pro-input">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Data Final</label>
+                        <input type="date" name="audit_end" value="<?= h($auditEnd) ?>" class="pro-input">
+                    </div>
+
+                    <div class="col-span-full flex flex-wrap items-center justify-end gap-3">
+                        <a href="?#cron-audit" class="btn-pro btn-secondary">
+                            <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                            <span>Limpar</span>
+                        </a>
+                        <button type="submit" class="btn-pro btn-primary">
+                            <i data-lucide="filter" class="w-4 h-4"></i>
+                            <span>Filtrar Auditoria</span>
+                        </button>
+                    </div>
+                </form>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+                    <div class="p-3 bg-slate-900/60 rounded-xl border border-white/5"><span class="text-slate-400 text-xs block">Meta Execuções</span><strong class="text-xl font-mono text-white"><?= number_format((int)$auditMetaSummary['total'], 0, ',', '.') ?></strong></div>
+                    <div class="p-3 bg-slate-900/60 rounded-xl border border-white/5"><span class="text-slate-400 text-xs block">Meta Sucesso</span><strong class="text-xl font-mono text-emerald-400"><?= number_format((int)$auditMetaSummary['success'], 0, ',', '.') ?></strong></div>
+                    <div class="p-3 bg-slate-900/60 rounded-xl border border-white/5"><span class="text-slate-400 text-xs block">Meta Erros</span><strong class="text-xl font-mono text-rose-400"><?= number_format((int)$auditMetaSummary['error'], 0, ',', '.') ?></strong></div>
+                    <div class="p-3 bg-slate-900/60 rounded-xl border border-white/5"><span class="text-slate-400 text-xs block">Linhas Meta</span><strong class="text-xl font-mono text-indigo-400"><?= number_format((int)$auditMetaSummary['rows'], 0, ',', '.') ?></strong></div>
+                    <div class="p-3 bg-slate-900/60 rounded-xl border border-white/5"><span class="text-slate-400 text-xs block">Atr. Execuções</span><strong class="text-xl font-mono text-white"><?= number_format((int)$auditAttrSummary['total'], 0, ',', '.') ?></strong></div>
+                    <div class="p-3 bg-slate-900/60 rounded-xl border border-white/5"><span class="text-slate-400 text-xs block">Atr. Sucesso</span><strong class="text-xl font-mono text-emerald-400"><?= number_format((int)$auditAttrSummary['success'], 0, ',', '.') ?></strong></div>
+                    <div class="p-3 bg-slate-900/60 rounded-xl border border-white/5"><span class="text-slate-400 text-xs block">Atr. Erros</span><strong class="text-xl font-mono text-rose-400"><?= number_format((int)$auditAttrSummary['error'], 0, ',', '.') ?></strong></div>
+                    <div class="p-3 bg-slate-900/60 rounded-xl border border-white/5"><span class="text-slate-400 text-xs block">BMs Ativas</span><strong class="text-xl font-mono text-cyan-400"><?= number_format(count(array_filter($auditIntegrationRows, function ($item) { return ($item['status'] ?? 'active') === 'active'; })), 0, ',', '.') ?></strong></div>
+                </div>
+
+                <div class="space-y-3">
+                    <h3 class="text-sm font-bold text-white flex items-center gap-2"><i data-lucide="server-cog" class="w-4 h-4 text-cyan-400"></i><span>Saúde das BMs</span></h3>
+                    <div class="table-container">
+                        <table class="pro-table text-xs">
+                            <thead><tr><th>BM</th><th>Status</th><th>Intervalo</th><th>Moeda</th><th>Último Sucesso</th><th>Último Erro</th><th>Mensagem do Erro</th></tr></thead>
+                            <tbody>
+                            <?php if (!$auditIntegrationRows): ?>
+                                <tr><td colspan="7" class="text-center text-slate-500 py-5">Nenhuma BM cadastrada.</td></tr>
+                            <?php else: foreach ($auditIntegrationRows as $item): ?>
+                                <tr>
+                                    <td class="font-semibold text-white"><?= h((string)($item['name'] ?? ('BM #' . (int)$item['id']))) ?></td>
+                                    <td><span class="badge <?= (($item['status'] ?? 'active') === 'active') ? 'badge-emerald' : 'badge-rose' ?>"><?= h((string)($item['status'] ?? 'active')) ?></span></td>
+                                    <td class="font-mono"><?= (int)($item['sync_interval_minutes'] ?? 0) ?> min</td>
+                                    <td class="font-mono"><?= h((string)($item['currency_code'] ?? 'BRL')) ?></td>
+                                    <td class="font-mono text-slate-400"><?= h((string)($item['last_success_sync_at'] ?? '-')) ?></td>
+                                    <td class="font-mono text-slate-400"><?= h((string)($item['last_error_at'] ?? '-')) ?></td>
+                                    <td class="max-w-[420px] whitespace-normal break-words text-slate-300"><?= h((string)($item['last_error_message'] ?? '')) ?></td>
+                                </tr>
+                            <?php endforeach; endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <h3 class="text-sm font-bold text-white flex items-center gap-2"><i data-lucide="activity" class="w-4 h-4 text-indigo-400"></i><span>Execuções Meta Graph API</span></h3>
+                    <div class="table-container">
+                        <table class="pro-table text-xs">
+                            <thead><tr><th>ID</th><th>BM</th><th>Escopo</th><th>Período</th><th>Início</th><th>Duração</th><th>Status</th><th>Linhas</th><th>Mensagem</th></tr></thead>
+                            <tbody>
+                            <?php if (!$auditMetaRows): ?>
+                                <tr><td colspan="9" class="text-center text-slate-500 py-5">Nenhuma execução Meta encontrada para os filtros.</td></tr>
+                            <?php else: foreach ($auditMetaRows as $run): ?>
+                                <tr>
+                                    <td class="font-mono text-slate-400">#<?= (int)$run['id'] ?></td>
+                                    <td class="font-semibold text-white"><?= h((string)($run['integration_name'] ?? ('BM #' . (int)$run['integration_id']))) ?></td>
+                                    <td><?= h((string)$run['scope']) ?></td>
+                                    <td class="font-mono text-slate-400"><?= h((string)$run['date_from']) ?> a <?= h((string)$run['date_to']) ?></td>
+                                    <td class="font-mono text-slate-400"><?= h((string)$run['started_at']) ?></td>
+                                    <td class="font-mono"><?= h(format_run_duration($run['started_at'] ?? '', $run['finished_at'] ?? '')) ?></td>
+                                    <td><span class="badge <?= h(status_badge_class($run['status'] ?? '')) ?>"><?= h((string)$run['status']) ?></span></td>
+                                    <td class="font-mono text-indigo-400"><?= number_format((int)$run['rows_upserted'], 0, ',', '.') ?></td>
+                                    <td class="max-w-[520px] whitespace-normal break-words text-slate-300"><?= h((string)($run['message'] ?? '')) ?></td>
+                                </tr>
+                            <?php endforeach; endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <h3 class="text-sm font-bold text-white flex items-center gap-2"><i data-lucide="git-merge" class="w-4 h-4 text-emerald-400"></i><span>Execuções de Atribuição</span></h3>
+                        <span class="text-xs text-slate-500">A tabela de atribuição é geral; ela não grava BM por execução.</span>
+                    </div>
+                    <div class="table-container">
+                        <table class="pro-table text-xs">
+                            <thead><tr><th>ID</th><th>Tipo</th><th>Início</th><th>Duração</th><th>Status</th><th>Stats</th><th>Mensagem</th></tr></thead>
+                            <tbody>
+                            <?php if (!$auditAttrRows): ?>
+                                <tr><td colspan="7" class="text-center text-slate-500 py-5">Nenhuma execução de atribuição encontrada para os filtros.</td></tr>
+                            <?php else: foreach ($auditAttrRows as $run): ?>
+                                <tr>
+                                    <td class="font-mono text-slate-400">#<?= (int)$run['id'] ?></td>
+                                    <td><?= h((string)$run['run_type']) ?></td>
+                                    <td class="font-mono text-slate-400"><?= h((string)$run['started_at']) ?></td>
+                                    <td class="font-mono"><?= h(format_run_duration($run['started_at'] ?? '', $run['finished_at'] ?? '')) ?></td>
+                                    <td><span class="badge <?= h(status_badge_class($run['status'] ?? '')) ?>"><?= h((string)$run['status']) ?></span></td>
+                                    <td class="max-w-[360px] whitespace-normal break-words font-mono text-slate-400"><?= h((string)($run['stats_json'] ?? '')) ?></td>
+                                    <td class="max-w-[520px] whitespace-normal break-words text-slate-300"><?= h((string)($run['message'] ?? '')) ?></td>
+                                </tr>
+                            <?php endforeach; endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <h3 class="text-sm font-bold text-white flex items-center gap-2"><i data-lucide="file-warning" class="w-4 h-4 text-amber-400"></i><span>Log Técnico do Sistema</span></h3>
+                    <div class="table-container">
+                        <table class="pro-table text-xs">
+                            <thead><tr><th>Últimas linhas de logs/app.log</th></tr></thead>
+                            <tbody>
+                            <?php if (!$auditAppLogLines): ?>
+                                <tr><td class="text-center text-slate-500 py-5">Arquivo de log vazio ou ainda não criado.</td></tr>
+                            <?php else: foreach ($auditAppLogLines as $line): ?>
+                                <tr><td class="font-mono whitespace-normal break-words text-slate-300"><?= h($line) ?></td></tr>
+                            <?php endforeach; endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
 
         </div>
     </main>
