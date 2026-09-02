@@ -153,6 +153,11 @@ function ensure_meta_integration_schema(PDO $pdo): void
         'currency_code' => "ALTER TABLE meta_integrations ADD COLUMN currency_code VARCHAR(3) NOT NULL DEFAULT 'BRL'",
         'currency_spread_percent' => "ALTER TABLE meta_integrations ADD COLUMN currency_spread_percent DECIMAL(8,4) NOT NULL DEFAULT 0.0000",
         'manual_exchange_rate' => "ALTER TABLE meta_integrations ADD COLUMN manual_exchange_rate DECIMAL(12,6) DEFAULT NULL",
+        'sync_interval_minutes' => "ALTER TABLE meta_integrations ADD COLUMN sync_interval_minutes INT UNSIGNED NOT NULL DEFAULT 30",
+        'last_sync_at' => "ALTER TABLE meta_integrations ADD COLUMN last_sync_at DATETIME NULL",
+        'last_success_sync_at' => "ALTER TABLE meta_integrations ADD COLUMN last_success_sync_at DATETIME NULL",
+        'last_error_at' => "ALTER TABLE meta_integrations ADD COLUMN last_error_at DATETIME NULL",
+        'last_error_message' => "ALTER TABLE meta_integrations ADD COLUMN last_error_message TEXT NULL",
     ];
 
     foreach ($columns as $column => $sql) {

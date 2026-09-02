@@ -792,6 +792,7 @@ function tail_file_lines($file, $limit = 60)
 }
 
 $pdo = db();
+ensure_meta_integration_schema($pdo);
 $integrations = $pdo->query('SELECT * FROM meta_integrations ORDER BY id DESC')->fetchAll();
 $integration = $integrations ? $integrations[0] : null;
 
